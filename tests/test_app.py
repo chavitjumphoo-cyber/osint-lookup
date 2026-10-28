@@ -101,7 +101,8 @@ def test_lookup_failure_does_not_generate_graph_and_can_retry(app_dependencies):
     assert len(app.get("download_button")) == 2
 
 
-def test_maxplus_settings_reach_both_investigation_and_graph(app_dependencies, monkeypatch):
+@pytest.mark.parametrize("save_settings", [False, True])
+def test_maxplus_settings_reach_both_investigation_and_graph(app_dependencies, monkeypatch, save_settings):
     lookup, client_builder, graph_builder, _ = app_dependencies
     models = Mock(return_value=["gpt-fixture"])
     monkeypatch.setattr(agent, "list_provider_models", models)
@@ -111,7 +112,8 @@ def test_maxplus_settings_reach_both_investigation_and_graph(app_dependencies, m
     app.button(key="load_provider_models").click().run()
     assert models.call_args.args[0]["base_url"] == "https://api.maxplus-ai.cc/v1"
     assert models.call_args.args[0]["provider"] == "openai"
-    next(button for button in app.button if "บันทึก API Keys" in button.label).click().run()
+    if save_settings:
+        next(button for button in app.button if "บันทึก API Keys" in button.label).click().run()
     investigate(app)
     assert not app.error
     assert lookup.call_args.kwargs["api_keys"] == {
@@ -121,5 +123,30 @@ def test_maxplus_settings_reach_both_investigation_and_graph(app_dependencies, m
     client_builder.assert_called_once_with(
         api_key_override="ccsk-fixture", provider_override="openai",
         base_url_override="https://api.maxplus-ai.cc/v1",
+    )
+    assert graph_builder.call_args.kwargs["model"] == "gpt-fixture"
+
+
+def test_current_settings_replace_previously_saved_settings(app_dependencies):
+    lookup, client_builder, graph_builder, _ = app_dependencies
+    app = AppTest.from_file(str(APP), default_timeout=15).run()
+    app.selectbox(key="api_provider").select("MaxPlus Claude").run()
+    app.text_input(key="anthropic_api_key").set_value("ccsk-old-fixture")
+    next(button for button in app.button if "บันทึก API Keys" in button.label).click().run()
+
+    app.selectbox(key="api_provider").select("MaxPlus GPT").run()
+    app.text_input(key="anthropic_api_key").set_value("ccsk-new-fixture")
+    app.text_input(key="api_base_url_MaxPlus GPT").set_value("https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1")
+    app.text_input(key="api_model_MaxPlus GPT").set_value("gpt-fixture")
+    investigate(app)
+
+    assert not app.error
+    assert lookup.call_args.kwargs["api_keys"] == {
+        "anthropic": "ccsk-new-fixture", "provider": "openai",
+        "base_url": "https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1", "model": "gpt-fixture",
+    }
+    client_builder.assert_called_once_with(
+        api_key_override="ccsk-new-fixture", provider_override="openai",
+        base_url_override="https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1",
     )
     assert graph_builder.call_args.kwargs["model"] == "gpt-fixture"

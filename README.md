@@ -55,8 +55,10 @@ must support it. Existing Anthropic configuration remains valid.
 
 In the API settings, choose **MaxPlus GPT** for a GPT pool or **MaxPlus Claude**
 for a Claude pool, enter your `ccsk-…` key, then click **โหลดรายการโมเดล / ตรวจสอบ key**.
-Select a model returned by your key and click **บันทึก API Keys** before starting
-an investigation. Loading models checks authentication without generating a report.
+Select a model returned by your key, then start the investigation. The app uses
+the API settings currently shown in the UI; **บันทึก API Keys** keeps the entered
+keys available in the current session when their input fields are cleared.
+Loading models checks authentication without generating a report.
 Settings and keys are stored only in the current Streamlit session.
 
 MaxPlus GPT uses `https://api.maxplus-ai.cc/v1` by default. A pool-specific URL

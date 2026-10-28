@@ -417,7 +417,7 @@ with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ 
                 if not models:
                     raise RuntimeError("ไม่พบโมเดลสำหรับ key นี้ กรุณาตรวจ pool ใน Dashboard")
                 st.session_state[models_key] = models
-            st.success("เชื่อมต่อสำเร็จ เลือก Model ID แล้วบันทึกการตั้งค่า")
+            st.success("เชื่อมต่อสำเร็จ เลือก Model ID แล้วเริ่มสืบสวนได้เลย")
         except Exception as exc:
             st.session_state.pop(models_key, None)
             st.error(f"เชื่อมต่อไม่สำเร็จ: {exc}")
@@ -485,18 +485,18 @@ with st.form("investigate"):
 st.markdown('</div>', unsafe_allow_html=True)
 
 
-def _saved_api_keys():
+def _current_api_keys():
     return {
-        name: st.session_state[key]
-        for name, key in (
-            ("anthropic", "saved_anthropic_key"),
-            ("google", "saved_google_key"),
-            ("google_cx", "saved_google_cx"),
-            ("provider", "saved_provider"),
-            ("base_url", "saved_base_url"),
-            ("model", "saved_model"),
+        name: value
+        for name, value in (
+            ("anthropic", anthropic_key.strip() or st.session_state.get("saved_anthropic_key", "")),
+            ("google", google_key.strip() or st.session_state.get("saved_google_key", "")),
+            ("google_cx", google_cx.strip() or st.session_state.get("saved_google_cx", "")),
+            ("provider", provider),
+            ("base_url", base_url),
+            ("model", model),
         )
-        if st.session_state.get(key)
+        if value
     }
 
 
@@ -564,7 +564,7 @@ if result:
             })
             timeline_container.markdown(_timeline_html(result["events"]), unsafe_allow_html=True)
 
-        api_keys = _saved_api_keys()
+        api_keys = _current_api_keys()
         try:
             result["report"] = run_osint_lookup(
                 identifier_type=result["type"],
