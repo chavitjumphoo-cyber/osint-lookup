@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ฟีเจอร์ — OSINT Lookup</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0a0e1a;
+            --cyan: #00d9ff;
+            --gold: #C9A96E;
+            --text: #e8eaed;
+            --text-dim: #9aa0a6;
+        }
+
+        body {
+            font-family: 'Sarabun', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 5%;
+            background: rgba(10, 14, 26, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 217, 255, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-mark {
+            font-size: 1.75rem;
+            color: var(--cyan);
+        }
+
+        nav {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        nav a {
+            color: var(--text-dim);
+            text-decoration: none;
+            transition: color 0.3s;
+            cursor: pointer;
+        }
+
+        nav a:hover {
+            color: var(--cyan);
+        }
+
+        .btn-nav {
+            background: var(--cyan);
+            color: var(--bg);
+            padding: 0.6rem 1.5rem;
+            border-radius: 0.4rem;
+            font-weight: 600;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .btn-nav:hover {
+            opacity: 0.9;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 5%;
+        }
+
+        .header {
+            padding: 6rem 5% 4rem;
+            text-align: center;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: var(--cyan);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            color: var(--text-dim);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 4rem 5%;
+            animation: fadeIn 1s ease-out;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(0, 217, 255, 0.2);
+            border-radius: 1rem;
+            padding: 2.5rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .feature-card:hover {
+            border-color: var(--cyan);
+            background: rgba(0, 217, 255, 0.05);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px rgba(0, 217, 255, 0.1);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+
+        .feature-desc {
+            color: var(--text-dim);
+            line-height: 1.8;
+            font-size: 0.95rem;
+        }
+
+        .feature-list {
+            margin-top: 1.5rem;
+            list-style: none;
+        }
+
+        .feature-list li {
+            color: var(--text-dim);
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .feature-list li:before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: var(--cyan);
+        }
+
+        .cta-section {
+            text-align: center;
+            padding: 6rem 5%;
+            background: rgba(0, 217, 255, 0.05);
+            border-top: 1px solid rgba(0, 217, 255, 0.1);
+            border-bottom: 1px solid rgba(0, 217, 255, 0.1);
+        }
+
+        .cta-section h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--cyan);
+        }
+
+        .cta-section p {
+            color: var(--text-dim);
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+
+        .btn-primary {
+            background: var(--cyan);
+            color: var(--bg);
+            padding: 1rem 2.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(0, 217, 255, 0.4);
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 5%;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            nav {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="logo">
+            <span class="logo-mark">◆</span>
+            <span>OSINT Lookup</span>
+        </div>
+        <nav>
+            <a href="landing.html">หน้าแรก</a>
+            <a href="features.html" style="color: var(--cyan); font-weight: 600;">ฟีเจอร์</a>
+            <a href="tools.html">เครื่องมือ</a>
+            <a href="http://localhost:8506" target="_blank" class="btn-nav">เริ่มใช้งาน →</a>
+        </nav>
+    </nav>
+
+    <!-- Header -->
+    <div class="header">
+        <h1>🎯 ฟีเจอร์หลัก</h1>
+        <p>ความสามารถในการค้นหา ตรวจสอบ และเชื่อมโยงข้อมูลเบื้องต้นแบบมืออาชีพ<br>
+        <span style="font-size: 0.9rem; color: #a855f7;">พัฒนาจาก <a href="https://github.com/gs-ai/SYNINT" target="_blank" style="color: #a855f7; text-decoration: none;">SYNINT</a> + <a href="https://github.com/Doble-2/osint-d2" target="_blank" style="color: #a855f7; text-decoration: none;">OSINT-D2</a></span></p>
+    </div>
+
+    <!-- Features Grid -->
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">📱</div>
+            <div class="feature-title">Phone Scanner</div>
+            <div class="feature-desc">
+                สแกนข้อมูลเบอร์โทรศัพท์จากหลายแหล่ง
+            </div>
+            <ul class="feature-list">
+                <li>ตรวจสอบ carrier (AIS/Dtac/True)</li>
+                <li>ค้นหาบัญชีที่เชื่อมโยง</li>
+                <li>สถานะ WhatsApp</li>
+                <li>รูปแบบสากล</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">🔍</div>
+            <div class="feature-title">Username Search</div>
+            <div class="feature-desc">
+                ค้นหาชื่อผู้ใช้ข้ามแพลตฟอร์มพร้อมกัน
+            </div>
+            <ul class="feature-list">
+                <li>ค้นหา 30+ แพลตฟอร์ม</li>
+                <li>โปรไฟล์ที่มีชื่อใกล้เคียง</li>
+                <li>ตรวจสอบความพร้อมใช้งาน</li>
+                <li>สแกนแบบเรียลไทม์</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">🖼️</div>
+            <div class="feature-title">Reverse Image Search</div>
+            <div class="feature-desc">
+                ค้นหาจากรูปภาพหรือ Avatar
+            </div>
+            <ul class="feature-list">
+                <li>เปรียบเทียบรูปภาพ</li>
+                <li>Perceptual hashing</li>
+                <li>ตรวจสอบรูปที่เหมือนกัน</li>
+                <li>ตรวจหา deepfakes ขั้นพื้นฐาน</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">📧</div>
+            <div class="feature-title">Email Lookup</div>
+            <div class="feature-desc">
+                ยืนยันและค้นหาข้อมูลอีเมล
+            </div>
+            <ul class="feature-list">
+                <li>ตรวจสอบ Gmail validity</li>
+                <li>วิเคราะห์โดเมน</li>
+                <li>ค้นหาอีเมลที่เชื่อมโยง</li>
+                <li>ตรวจหา disposable emails</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">🌐</div>
+            <div class="feature-title">Domain Analysis</div>
+            <div class="feature-desc">
+                วิเคราะห์โดเมน URL และเว็บไซต์
+            </div>
+            <ul class="feature-list">
+                <li>WHOIS lookup</li>
+                <li>DNS records</li>
+                <li>Registrar info</li>
+                <li>SSL certificate details</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">🧠</div>
+            <div class="feature-title">AI Analysis</div>
+            <div class="feature-desc">
+                วิเคราะห์และเชื่อมโยงข้อมูลอัตโนมัติ
+            </div>
+            <ul class="feature-list">
+                <li>Identity triangulation</li>
+                <li>Stylometry matching</li>
+                <li>Social graph building</li>
+                <li>Confidence scoring</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <div class="feature-title">Report Generation</div>
+            <div class="feature-desc">
+                สร้างรายงานผลลัพธ์ที่ครบถ้วน
+            </div>
+            <ul class="feature-list">
+                <li>HTML report ที่สวยงาม</li>
+                <li>Export เป็น Markdown</li>
+                <li>Timeline ที่ชัดเจน</li>
+                <li>Evidence trail</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">🔐</div>
+            <div class="feature-title">Privacy & Compliance</div>
+            <div class="feature-desc">
+                ปฏิบัติตามกฎหมายการคุ้มครองข้อมูล
+            </div>
+            <ul class="feature-list">
+                <li>PDPA compliant</li>
+                <li>Public data only</li>
+                <li>Audit logging</li>
+                <li>Ethical guidelines</li>
+            </ul>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">Real-time Processing</div>
+            <div class="feature-desc">
+                ประมวลผลข้อมูลแบบเรียลไทม์
+            </div>
+            <ul class="feature-list">
+                <li>Live timeline updates</li>
+                <li>Parallel scanning</li>
+                <li>Progressive results</li>
+                <li>Streaming reports</li>
+            </ul>
+        </div>
+
+        <div class="feature-card" style="border-color: #a855f7;">
+            <div class="feature-icon">🔬</div>
+            <div class="feature-title">Identity Triangulation <span style="font-size: 0.7rem; color: #a855f7;">OSINT-D2</span></div>
+            <div class="feature-desc">
+                เชื่อมโยงตัวตนข้ามแพลตฟอร์มด้วย AI
+            </div>
+            <ul class="feature-list">
+                <li>Username correlation</li>
+                <li>Email pattern matching</li>
+                <li>Avatar perceptual hashing</li>
+                <li>Bio & metadata linking</li>
+            </ul>
+        </div>
+
+        <div class="feature-card" style="border-color: #a855f7;">
+            <div class="feature-icon">🧬</div>
+            <div class="feature-title">6D Cognitive Profiling <span style="font-size: 0.7rem; color: #a855f7;">OSINT-D2</span></div>
+            <div class="feature-desc">
+                วิเคราะห์บุคลิกภาพใน 6 มิติ
+            </div>
+            <ul class="feature-list">
+                <li>Identity & Demographics</li>
+                <li>Geo-temporal patterns</li>
+                <li>OCEAN Psychology</li>
+                <li>Tech stack & skills</li>
+                <li>Ideology & interests</li>
+                <li>OpSec & attack surface</li>
+            </ul>
+        </div>
+
+        <div class="feature-card" style="border-color: #a855f7;">
+            <div class="feature-icon">⏱️</div>
+            <div class="feature-title">Timeline Reconstruction <span style="font-size: 0.7rem; color: #a855f7;">SYNINT</span></div>
+            <div class="feature-desc">
+                สร้าง timeline จากหลักฐานที่รวบรวม
+            </div>
+            <ul class="feature-list">
+                <li>Chronological event ordering</li>
+                <li>Historical DNS analysis</li>
+                <li>Domain registration patterns</li>
+                <li>Archive data integration</li>
+            </ul>
+        </div>
+
+        <div class="feature-card" style="border-color: #a855f7;">
+            <div class="feature-icon">🕸️</div>
+            <div class="feature-title">Relationship Graph <span style="font-size: 0.7rem; color: #a855f7;">SYNINT</span></div>
+            <div class="feature-desc">
+                วิเคราะห์ความสัมพันธ์และโครงสร้างเครือข่าย
+            </div>
+            <ul class="feature-list">
+                <li>Co-occurrence edges</li>
+                <li>Connected components</li>
+                <li>Degree centrality</li>
+                <li>Network density analysis</li>
+            </ul>
+        </div>
+
+        <div class="feature-card" style="border-color: #a855f7;">
+            <div class="feature-icon">📚</div>
+            <div class="feature-title">Archive Collection <span style="font-size: 0.7rem; color: #a855f7;">SYNINT</span></div>
+            <div class="feature-desc">
+                ค้นหาข้อมูลจากเว็บเก่า
+            </div>
+            <ul class="feature-list">
+                <li>Wayback Machine lookup</li>
+                <li>Common Crawl search</li>
+                <li>Historical snapshots</li>
+                <li>WARC record fetching</li>
+            </ul>
+        </div>
+
+        <div class="feature-card" style="border-color: #a855f7;">
+            <div class="feature-icon">✍️</div>
+            <div class="feature-title">Stylometry Analysis <span style="font-size: 0.7rem; color: #a855f7;">OSINT-D2</span></div>
+            <div class="feature-desc">
+                วิเคราะห์รูปแบบการเขียนและภาษา
+            </div>
+            <ul class="feature-list">
+                <li>Character n-gram analysis</li>
+                <li>Writing style matching</li>
+                <li>Author attribution</li>
+                <li>Cross-platform correlation</li>
+            </ul>
+        </div>
+
+        <div class="feature-card" style="border-color: #a855f7;">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-title">Trust Anchors <span style="font-size: 0.7rem; color: #a855f7;">OSINT-D2</span></div>
+            <div class="feature-desc">
+                กรองข้อมูลผิดพลาดด้วยแหล่งที่เชื่อถือ
+            </div>
+            <ul class="feature-list">
+                <li>Weighted scoring system</li>
+                <li>4-signal verification</li>
+                <li>False positive reduction</li>
+                <li>Confidence scoring</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- CTA Section -->
+    <div class="cta-section">
+        <h2>พร้อมเริ่มสืบสวนหรือยัง?</h2>
+        <p>ใช้เครื่องมือ OSINT ได้ทันที โดยไม่ต้องการข้อมูลส่วนตัวหรือ API key</p>
+        <a href="http://localhost:8506" class="btn-primary">เข้าไปใช้งาน →</a>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>OSINT Lookup © 2025 — Intelligence Platform | ใช้เฉพาะข้อมูลสาธารณะ (Public Data)</p>
+    </footer>
+</body>
+</html>

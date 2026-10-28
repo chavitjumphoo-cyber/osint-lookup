@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เกี่ยวกับ — OSINT Lookup</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0a0e1a;
+            --cyan: #00d9ff;
+            --gold: #C9A96E;
+            --purple: #a855f7;
+            --text: #e8eaed;
+            --text-dim: #9aa0a6;
+        }
+
+        body {
+            font-family: 'Sarabun', 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 5%;
+            background: rgba(10, 14, 26, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 217, 255, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-mark {
+            font-size: 1.75rem;
+            color: var(--cyan);
+        }
+
+        nav {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        nav a {
+            color: var(--text-dim);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        nav a:hover {
+            color: var(--cyan);
+        }
+
+        .btn-nav {
+            background: var(--cyan);
+            color: var(--bg);
+            padding: 0.6rem 1.5rem;
+            border-radius: 0.4rem;
+            font-weight: 600;
+        }
+
+        .header {
+            padding: 6rem 5% 4rem;
+            text-align: center;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            color: var(--text-dim);
+            max-width: 900px;
+            margin: 0 auto;
+            line-height: 1.8;
+        }
+
+        .content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 5% 4rem;
+        }
+
+        .section {
+            margin-bottom: 4rem;
+            animation: fadeIn 1s ease-out;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            color: var(--cyan);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .inspiration-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .inspiration-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            border-radius: 1rem;
+            padding: 2.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .inspiration-card:hover {
+            border-color: var(--purple);
+            background: rgba(168, 85, 247, 0.05);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px rgba(168, 85, 247, 0.15);
+        }
+
+        .inspiration-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .inspiration-icon {
+            font-size: 2.5rem;
+        }
+
+        .inspiration-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--purple);
+        }
+
+        .inspiration-link {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            display: block;
+            font-family: monospace;
+        }
+
+        .inspiration-link:hover {
+            color: var(--purple);
+        }
+
+        .inspiration-desc {
+            color: var(--text-dim);
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin-top: 1rem;
+        }
+
+        .feature-list li {
+            color: var(--text-dim);
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .feature-list li:before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: var(--purple);
+        }
+
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .tech-card {
+            background: rgba(0, 217, 255, 0.05);
+            border: 1px solid rgba(0, 217, 255, 0.2);
+            border-radius: 0.8rem;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .tech-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .tech-name {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--cyan);
+        }
+
+        .tech-desc {
+            font-size: 0.9rem;
+            color: var(--text-dim);
+        }
+
+        .features-implemented {
+            background: rgba(0, 217, 255, 0.03);
+            border: 1px solid rgba(0, 217, 255, 0.2);
+            border-radius: 1rem;
+            padding: 2.5rem;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .feature-item {
+            background: rgba(255, 255, 255, 0.02);
+            border-left: 3px solid var(--cyan);
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .feature-name {
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-origin {
+            font-size: 0.75rem;
+            color: var(--purple);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-desc {
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        .cta-section {
+            text-align: center;
+            padding: 6rem 5%;
+            background: rgba(0, 217, 255, 0.05);
+            border-top: 1px solid rgba(0, 217, 255, 0.1);
+        }
+
+        .btn-primary {
+            background: var(--cyan);
+            color: var(--bg);
+            padding: 1rem 2.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(0, 217, 255, 0.4);
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 5%;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            nav {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .inspiration-grid,
+            .tech-stack,
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="logo">
+            <span class="logo-mark">◆</span>
+            <span>OSINT Lookup</span>
+        </div>
+        <nav>
+            <a href="landing.html">หน้าแรก</a>
+            <a href="features.html">ฟีเจอร์</a>
+            <a href="tools.html">เครื่องมือ</a>
+            <a href="about.html" style="color: var(--cyan); font-weight: 600;">เกี่ยวกับ</a>
+            <a href="http://localhost:8506" target="_blank" class="btn-nav">เริ่มใช้งาน →</a>
+        </nav>
+    </nav>
+
+    <!-- Header -->
+    <div class="header">
+        <h1>💎 เกี่ยวกับ OSINT Lookup</h1>
+        <p>
+            Intelligence platform ที่รวมเอาแนวคิดจาก 2 โปรเจกต์ชั้นนำระดับโลก<br>
+            ผสมผสานกับ AI Agent แบบ ReAct pattern เพื่อการสืบสวนที่ชาญฉลาดและอัตโนมัติ
+        </p>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <!-- Inspiration Section -->
+        <div class="section">
+            <h2 class="section-title">
+                <span>🎯</span>
+                แรงบันดาลใจ
+            </h2>
+            <div class="inspiration-grid">
+                <!-- SYNINT -->
+                <div class="inspiration-card">
+                    <div class="inspiration-header">
+                        <span class="inspiration-icon">🔬</span>
+                        <div>
+                            <div class="inspiration-title">SYNINT v5</div>
+                            <a href="https://github.com/gs-ai/SYNINT" target="_blank" class="inspiration-link">
+                                github.com/gs-ai/SYNINT
+                            </a>
+                        </div>
+                    </div>
+                    <div class="inspiration-desc">
+                        <strong>Local-first multi-agent OSINT framework</strong> ที่ใช้ระบบ 46+ agents ทำงานแบบ pipeline
+                        พร้อม forensic runtime และ chain-of-custody logging
+                    </div>
+                    <ul class="feature-list">
+                        <li><strong>Timeline Reconstruction</strong> — สร้าง timeline จากหลักฐาน</li>
+                        <li><strong>Archive Collection</strong> — รวบรวมจาก Wayback Machine, Common Crawl</li>
+                        <li><strong>Entity Resolution</strong> — เชื่อมโยงตัวตนข้ามแหล่งข้อมูล</li>
+                        <li><strong>Relationship Graph</strong> — วิเคราะห์ความสัมพันธ์และ centrality</li>
+                        <li><strong>Forensic Ledger</strong> — append-only audit trail</li>
+                    </ul>
+                </div>
+
+                <!-- OSINT-D2 -->
+                <div class="inspiration-card">
+                    <div class="inspiration-header">
+                        <span class="inspiration-icon">🤖</span>
+                        <div>
+                            <div class="inspiration-title">OSINT-D2</div>
+                            <a href="https://github.com/Doble-2/osint-d2" target="_blank" class="inspiration-link">
+                                github.com/Doble-2/osint-d2
+                            </a>
+                        </div>
+                    </div>
+                    <div class="inspiration-desc">
+                        <strong>Agentic AI investigation platform</strong> ที่ใช้ ReAct reasoning loop
+                        ให้ LLM ตัดสินใจเลือกเครื่องมือและต่อยอดการสืบสวนเอง
+                    </div>
+                    <ul class="feature-list">
+                        <li><strong>Identity Triangulation</strong> — เชื่อมโยง username, email, avatar, bio</li>
+                        <li><strong>6D Cognitive Profiling</strong> — Identity, Geo, Psychology, Tech, Ideology, OpSec</li>
+                        <li><strong>Avatar Comparison</strong> — perceptual dHash matching</li>
+                        <li><strong>Stylometry Analysis</strong> — character n-gram writing style</li>
+                        <li><strong>Trust Anchors</strong> — weighted scoring จากแหล่งที่เชื่อถือ</li>
+                        <li><strong>PDF Dossiers</strong> — รายงานสไตล์เอกสารลับ</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- What We Built -->
+        <div class="section">
+            <h2 class="section-title">
+                <span>🚀</span>
+                สิ่งที่เราพัฒนา
+            </h2>
+            <div class="features-implemented">
+                <p style="color: var(--text-dim); line-height: 1.8; margin-bottom: 2rem;">
+                    เรานำแนวคิดจาก <strong>SYNINT</strong> และ <strong>OSINT-D2</strong> มาผสมผสาน
+                    พร้อมเพิ่ม features ใหม่ที่เหมาะกับการใช้งานในประเทศไทย และสร้าง UI/UX ที่ใช้งานง่าย
+                </p>
+
+                <div class="features-grid">
+                    <div class="feature-item">
+                        <div class="feature-origin">จาก OSINT-D2</div>
+                        <div class="feature-name">🧠 ReAct AI Agent</div>
+                        <div class="feature-desc">AI ตัดสินใจเลือก tools และวิเคราะห์ผลเอง</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">จาก OSINT-D2</div>
+                        <div class="feature-name">🔗 Identity Triangulation</div>
+                        <div class="feature-desc">เชื่อมโยงตัวตนข้ามแพลตฟอร์มอัตโนมัติ</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">จาก OSINT-D2</div>
+                        <div class="feature-name">🖼️ Avatar Comparison</div>
+                        <div class="feature-desc">เปรียบเทียบรูปด้วย perceptual hash</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">จาก OSINT-D2</div>
+                        <div class="feature-name">✍️ Stylometry Analysis</div>
+                        <div class="feature-desc">วิเคราะห์รูปแบบการเขียน</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">จาก SYNINT</div>
+                        <div class="feature-name">📊 Relationship Graph</div>
+                        <div class="feature-desc">สร้างกราฟความสัมพันธ์</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">จาก SYNINT</div>
+                        <div class="feature-name">🕐 Timeline Reconstruction</div>
+                        <div class="feature-desc">สร้าง timeline จากหลักฐาน</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">พัฒนาเอง</div>
+                        <div class="feature-name">📱 Phone Scanner (Thailand)</div>
+                        <div class="feature-desc">สแกนเบอร์ไทย AIS/Dtac/True + WhatsApp</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">พัฒนาเอง</div>
+                        <div class="feature-name">🇹🇭 Thai Platforms</div>
+                        <div class="feature-desc">Pantip, Sanook, Kapook และอื่น ๆ</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">พัฒนาเอง</div>
+                        <div class="feature-name">⚡ Real-time Timeline</div>
+                        <div class="feature-desc">ดูความคืบหน้าแบบ real-time</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">พัฒนาเอง</div>
+                        <div class="feature-name">🎨 Modern UI</div>
+                        <div class="feature-desc">Streamlit + Dark theme สวยงาม</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">พัฒนาเอง</div>
+                        <div class="feature-name">📄 HTML/Markdown Export</div>
+                        <div class="feature-desc">Export รายงานหลายรูปแบบ</div>
+                    </div>
+
+                    <div class="feature-item">
+                        <div class="feature-origin">พัฒนาเอง</div>
+                        <div class="feature-name">🔐 MaxPlus Integration</div>
+                        <div class="feature-desc">ใช้ API ไทย ราคาถูกกว่า</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tech Stack -->
+        <div class="section">
+            <h2 class="section-title">
+                <span>⚙️</span>
+                เทคโนโลยีที่ใช้
+            </h2>
+            <div class="tech-stack">
+                <div class="tech-card">
+                    <div class="tech-icon">🐍</div>
+                    <div class="tech-name">Python 3.11+</div>
+                    <div class="tech-desc">Core language</div>
+                </div>
+
+                <div class="tech-card">
+                    <div class="tech-icon">🤖</div>
+                    <div class="tech-name">Anthropic Claude</div>
+                    <div class="tech-desc">AI Agent (ReAct loop)</div>
+                </div>
+
+                <div class="tech-card">
+                    <div class="tech-icon">⚡</div>
+                    <div class="tech-name">Streamlit</div>
+                    <div class="tech-desc">Web UI framework</div>
+                </div>
+
+                <div class="tech-card">
+                    <div class="tech-icon">🔍</div>
+                    <div class="tech-name">Google Search API</div>
+                    <div class="tech-desc">Web search</div>
+                </div>
+
+                <div class="tech-card">
+                    <div class="tech-icon">📡</div>
+                    <div class="tech-name">Async/Await</div>
+                    <div class="tech-desc">Parallel scanning</div>
+                </div>
+
+                <div class="tech-card">
+                    <div class="tech-icon">🗄️</div>
+                    <div class="tech-name">SQLite</div>
+                    <div class="tech-desc">Investigation storage</div>
+                </div>
+
+                <div class="tech-card">
+                    <div class="tech-icon">🌐</div>
+                    <div class="tech-name">BeautifulSoup</div>
+                    <div class="tech-desc">HTML parsing</div>
+                </div>
+
+                <div class="tech-card">
+                    <div class="tech-icon">🎨</div>
+                    <div class="tech-name">PyVis</div>
+                    <div class="tech-desc">Graph visualization</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CTA Section -->
+    <div class="cta-section">
+        <h2 style="color: var(--cyan); margin-bottom: 1rem;">พร้อมทดลองใช้หรือยัง?</h2>
+        <p style="color: var(--text-dim); margin-bottom: 2rem;">เครื่องมือ OSINT ระดับมืออาชีพ — ใช้ฟรี ไม่ต้อง API key</p>
+        <a href="http://localhost:8506" class="btn-primary">เริ่มใช้งาน →</a>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>OSINT Lookup © 2025 — Built with inspiration from SYNINT & OSINT-D2</p>
+        <p style="margin-top: 0.5rem; font-size: 0.85rem;">
+            <a href="https://github.com/gs-ai/SYNINT" target="_blank" style="color: var(--purple); text-decoration: none;">SYNINT</a> |
+            <a href="https://github.com/Doble-2/osint-d2" target="_blank" style="color: var(--purple); text-decoration: none;">OSINT-D2</a>
+        </p>
+    </footer>
+</body>
+</html>
