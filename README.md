@@ -146,11 +146,22 @@ See `ARCHITECTURE.md` for module boundaries and compatibility details.
 
 ## Tests
 
+GitHub Actions runs the offline suite on Python 3.11 and 3.13 for pushes to
+`main` and pull requests. Runs can also be started manually from the
+[Actions page](https://github.com/chavitjumphoo-cyber/osint-lookup/actions).
+Code and push history are listed under
+[Commits](https://github.com/chavitjumphoo-cyber/osint-lookup/commits/main/).
+
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
 python -m pip check
 ```
+
+After pulling code while the local server is already running, stop it with
+Ctrl+C and run `python server.py` again. A browser refresh alone can leave older
+imported Python modules in the running Streamlit process. A restart also resets
+session API settings, which can be entered again in the UI.
 
 The default suite blocks unmocked Requests/httpx calls and uses fixtures for agent
 and UI tests. It does not spend API credits or investigate real people. Tests
