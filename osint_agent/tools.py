@@ -25,12 +25,12 @@ from urllib.parse import urljoin, urlparse, quote_plus
 
 import requests
 from bs4 import BeautifulSoup
-from googlesearch import search as google_search_api
 
 from . import advanced_tools  # import module ใหม่
 from . import synint_agents  # SYNINT-inspired agents
 from . import platform_scanner  # Multi-platform scanner
 from . import identity_triangulation  # Identity triangulation
+from .duckduckgo_search import duckduckgo_search, duckduckgo_search_lite, format_results
 
 SHERLOCK_TIMEOUT = 180
 FETCH_TIMEOUT = 15
@@ -127,17 +127,12 @@ def google_search_schema():
     return {
         "name": "google_search",
         "description": (
-            "ค้นหาข้อมูลจาก Google Search จริงๆ — รองรับ Google Dorks และเทคนิคค้นหาขั้นสูง\n\n"
-            "Google Dorks (ตัวอย่าง):\n"
+            "ค้นหาข้อมูลจาก DuckDuckGo Search (ฟรี ไม่ต้อง API Key) — รองรับ Search Operators\n\n"
+            "Search Operators (ตัวอย่าง):\n"
             '- "exact phrase" = ค้นหาวลีที่ตรงทุกตัว\n'
             '- site:facebook.com = จำกัดเฉพาะเว็บไซต์นั้น\n'
-            '- inurl:profile = URL ต้องมีคำว่า profile\n'
-            '- intitle:"john doe" = หัวข้อต้องมี john doe\n'
-            '- filetype:pdf = เฉพาะไฟล์ PDF\n'
-            '- * = wildcard สำหรับคำใดก็ได้\n'
             '- OR = หรือ (เช่น "john" OR "jane")\n'
-            '- - = ไม่รวม (เช่น "john" -smith)\n'
-            '- .. = ช่วงตัวเลข (เช่น 2020..2023)\n\n'
+            '- - = ไม่รวม (เช่น "john" -smith)\n\n'
             "ตัวอย่างคำค้นขั้นสูง:\n"
             '- "วงศ์ยศ เกิดศรี" site:facebook.com\n'
             '- "0812345678" (site:facebook.com OR site:twitter.com)\n'
@@ -179,34 +174,49 @@ def google_search_schema():
 
 
 def _run_google_search(query: str, num_results: int = 10, lang: str = "th", region: str = "th") -> dict:
-    """ค้นหา Google จริงๆ พร้อม Google Dorks support"""
+    """ค้นหาด้วย DuckDuckGo (ฟรี ไม่ต้อง API Key)"""
     try:
         # จำกัด num_results ไม่เกิน 30
         num_results = min(num_results, 30)
 
-        # ใช้ googlesearch-python แทน web_search API
-        results = []
-        count = 0
+        # ใช้ DuckDuckGo Search
+        results = duckduckgo_search(query, max_results=num_results)
 
-        # รองรับ Google Dorks โดยส่ง query ตรงๆ
-        for url in google_search_api(
-            query,
-            num_results=num_results,
-            lang=lang,
-            region=region,
-            sleep_interval=1.5,  # หน่วงเวลาเพื่อไม่ให้โดนบล็อก
-            advanced=True
-        ):
-            count += 1
-            results.append(f"{count}. {url}")
-            if count >= num_results:
-                break
+        # ลอง lite version ถ้าไม่ได้ผล
+        if not results:
+            results = duckduckgo_search_lite(query, max_results=num_results)
 
         if not results:
             return {
-                "output": f"ไม่พบผลลัพธ์สำหรับ: {query}\n\nคำแนะนำ:\n- ลองใช้คำค้นที่กว้างขึ้น\n- ลองใช้ Google Dorks เช่น site:facebook.com",
+                "output": f"ไม่พบผลลัพธ์สำหรับ: {query}\n\nคำแนะนำ:\n- ลองใช้คำค้นที่กว้างขึ้น\n- ลองใช้ operators เช่น site:facebook.com",
                 "images": []
             }
+
+        # Format results
+        output_lines = [f"🔍 ผลการค้นหา: {query}\n"]
+        output_lines.append(f"พบ {len(results)} รายการ\n")
+
+        for i, result in enumerate(results, 1):
+            title = result.get("title", "")
+            url = result.get("url", "")
+            snippet = result.get("snippet", "")
+
+            output_lines.append(f"{i}. {title}")
+            output_lines.append(f"   URL: {url}")
+            if snippet:
+                output_lines.append(f"   {snippet[:200]}")
+            output_lines.append("")
+
+        return {
+            "output": "\n".join(output_lines),
+            "images": []
+        }
+
+    except Exception as e:
+        return {
+            "output": f"เกิดข้อผิดพลาดในการค้นหา: {str(e)}\n\nลองใหม่อีกครั้งหรือใช้เครื่องมืออื่น",
+            "images": []
+        }
 
         output = f"🔍 Google Search: \"{query}\"\n"
         output += f"📍 Region: {region.upper()} | Language: {lang.upper()}\n\n"
