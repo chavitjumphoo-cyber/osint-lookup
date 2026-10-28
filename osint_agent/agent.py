@@ -14,6 +14,7 @@ from .system_prompt import SYSTEM_PROMPT
 from .enhanced_system_prompt import ENHANCED_SYSTEM_PROMPT
 from .tools import build_tool_list, execute_tool
 from .identity_triangulation import IdentityTriangulator
+from .providers import OpenAICompatibleClient, normalize_base_url
 
 MODEL = "claude-sonnet-5"
 MAX_STEPS = 16
@@ -41,32 +42,59 @@ def read_config() -> dict:
     return values
 
 
-def _build_client(api_key_override: str = None) -> Anthropic:
+def _build_client(api_key_override: str = None, *, base_url_override: str = None,
+                  provider_override: str = None):
     config = read_config()
-
-    # ลำดับความสำคัญ:
-    # 1. override จาก frontend (ถ้ามี)
-    # 2. จาก .env หรือ environment
-    # 3. ถ้าไม่มี ไม่ต้อง raise error ให้ใช้ default
-    api_key = api_key_override or config.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
-
-    # ถ้าไม่มี API key และไม่มี base_url ที่อนุญาต ให้ raise error
-    base_url = config.get("ANTHROPIC_BASE_URL") or os.environ.get("ANTHROPIC_BASE_URL")
-
-    # If MaxPlus base_url is set, it's optional to have API key (MaxPlus might use auth headers)
-    # But for standard Anthropic, we need the key
-    if not api_key and not base_url:
+    api_key = (api_key_override or config.get("ANTHROPIC_API_KEY")
+               or os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    base_url = (base_url_override or config.get("ANTHROPIC_BASE_URL")
+                or os.environ.get("ANTHROPIC_BASE_URL") or "").strip()
+    provider = (provider_override or config.get("OSINT_PROVIDER")
+                or os.environ.get("OSINT_PROVIDER") or "anthropic").strip().lower()
+    if provider not in ("anthropic", "openai"):
+        raise ValueError("OSINT_PROVIDER ต้องเป็น anthropic หรือ openai")
+    if not api_key:
         raise RuntimeError(
-            "ไม่พบ ANTHROPIC_API_KEY (ทั้งใน .env และตัวแปรแวดล้อม) กรุณาตั้งค่าก่อนใช้งาน"
+            "ไม่พบ API key กรุณาบันทึกในหน้าตั้งค่า API หรือกำหนด ANTHROPIC_API_KEY ใน .env"
         )
-
-    # ใช้ placeholder key ถ้า base_url เป็น MaxPlus แต่ไม่มี explicit key
-    if not api_key and base_url and "maxplus" in base_url.lower():
-        api_key = "placeholder-key"  # MaxPlus ไม่จำเป็นต้องใช้ key ถ้ากำหนด base_url
-
+    if api_key.startswith("ccsk-") and not base_url:
+        raise RuntimeError("Key ของ MaxPlus ต้องใช้ Base URL ของ MaxPlus กรุณาเลือกผู้ให้บริการและบันทึกการตั้งค่า")
     if base_url:
-        return Anthropic(api_key=api_key or "sk-placeholder", base_url=base_url)
+        base_url = normalize_base_url(base_url, provider)
+    if provider == "openai":
+        if not base_url:
+            raise RuntimeError("กรุณากำหนด API Base URL สำหรับ API แบบ OpenAI")
+        return OpenAICompatibleClient(api_key, base_url)
+    if base_url:
+        return Anthropic(api_key=api_key, base_url=base_url)
     return Anthropic(api_key=api_key)
+
+
+def _client_overrides(api_keys):
+    return {argument: api_keys[key] for key, argument in (
+        ("anthropic", "api_key_override"), ("base_url", "base_url_override"),
+        ("provider", "provider_override"),
+    ) if api_keys.get(key)}
+
+
+def _configured_model(api_keys=None):
+    api_keys = api_keys or {}
+    config = read_config()
+    model = api_keys.get("model") or config.get("OSINT_MODEL") or os.environ.get("OSINT_MODEL")
+    provider = api_keys.get("provider") or config.get("OSINT_PROVIDER") or os.environ.get("OSINT_PROVIDER")
+    if not model and provider == "openai":
+        raise RuntimeError("กรุณาโหลดรายการโมเดลหรือกรอก Model ID แล้วบันทึกการตั้งค่า API")
+    return (model or MODEL).strip()
+
+
+def list_provider_models(api_keys):
+    client = _build_client(**_client_overrides(api_keys))
+    try:
+        if isinstance(client, OpenAICompatibleClient):
+            return sorted(client.list_models())
+        return sorted(item.id for item in client.models.list())
+    finally:
+        client.close()
 
 
 def _extract_text(content_blocks) -> str:
@@ -146,23 +174,25 @@ def run_osint_lookup(
 
     on_event: callback(event: dict) — เรียกทุกครั้งที่เกิดความคืบหน้า
               event = {"kind": "step"|"search"|"tool"|"result"|"note"|"done", "text": str}
-    api_keys: dict — API keys จาก frontend {"anthropic": str, "google": str, "maxplus": str}
+    api_keys: dict — keys/settings: anthropic, google, google_cx, provider, base_url, model
     """
     emit = on_event or (lambda _event: None)
 
     # ใช้ API key จาก frontend ถ้ามี ไม่งั้นใช้จาก .env
     api_keys = api_keys or {}
-    client = _build_client(api_key_override=api_keys.get("anthropic"))
+    model = _configured_model(api_keys)
+    client = _build_client(**_client_overrides(api_keys))
+    try:
+        return _run_lookup(client, model, identifier_type, identifier_value, context, emit)
+    finally:
+        client.close()
 
+
+def _run_lookup(client, model, identifier_type, identifier_value, context, emit):
     # สร้าง Identity Triangulator สำหรับ session นี้
     triangulator = IdentityTriangulator()
 
-    # เก็บ API keys ใน environment สำหรับ tools
-    import os
-    if api_keys.get("google"):
-        os.environ["GOOGLE_API_KEY"] = api_keys["google"]
-    if api_keys.get("google_cx"):
-        os.environ["GOOGLE_CX"] = api_keys["google_cx"]
+    # Legacy Google settings remain accepted; DuckDuckGo does not require them.
 
     context_block = (
         f"\n\n# ข้อมูล input ของคำขอนี้\n"
@@ -190,7 +220,7 @@ def run_osint_lookup(
         emit({"kind": "step", "text": f"รอบคิดที่ {step}"})
 
         response = client.messages.create(
-            model=MODEL,
+            model=model,
             max_tokens=STEP_MAX_TOKENS,
             system=system,
             messages=messages,
@@ -239,7 +269,7 @@ def run_osint_lookup(
     )
 
     final_response = client.messages.create(
-        model=MODEL,
+        model=model,
         max_tokens=REPORT_MAX_TOKENS,
         system=system,
         messages=messages,

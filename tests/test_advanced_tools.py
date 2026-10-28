@@ -127,3 +127,26 @@ def test_scan_phone_valid_format():
     assert result.e164 == "+66812345678"
     assert "whatsapp" in result.footprint_urls
     assert "telegram" in result.footprint_urls
+    assert result.whatsapp_url == result.footprint_urls["whatsapp"]
+
+
+def test_phone_names_are_returned_in_existing_associated_names_field(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, url):
+            return SimpleNamespace(status_code=200, text='<b>Example Person</b>')
+
+    monkeypatch.setattr(advanced_tools.httpx, "AsyncClient", FakeClient)
+    result = asyncio.run(advanced_tools.scan_phone("+66812345678"))
+    assert "Example Person" in result.associated_names

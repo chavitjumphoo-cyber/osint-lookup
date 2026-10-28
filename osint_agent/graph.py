@@ -95,14 +95,14 @@ def _sanitize(data: dict) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
-def build_relationship_graph(client, report: str) -> dict:
+def build_relationship_graph(client, report: str, model: str = MODEL) -> dict:
     """เรียกโมเดลสกัดกราฟจากรายงาน คืน {"nodes": [...], "edges": [...]}"""
     if not report or not report.strip():
         return {"nodes": [], "edges": []}
 
     try:
         response = client.messages.create(
-            model=MODEL,
+            model=model,
             max_tokens=GRAPH_MAX_TOKENS,
             system=GRAPH_PROMPT,
             messages=[{"role": "user", "content": report}],

@@ -2,33 +2,42 @@
 Simple HTTP server to serve landing page and route to Streamlit
 """
 
-from http.server import SimpleHTTPRequestHandler, HTTPServer
-import os
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 import subprocess
-import threading
-import time
-import webbrowser
+import sys
+from urllib.parse import urlsplit
 
 PORT = 8000
 STREAMLIT_PORT = 8506
+ROOT = Path(__file__).resolve().parent
+PUBLIC_FILES = {"/landing.html", "/features.html", "/tools.html", "/about.html"}
 
 
 class Handler(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        """Handle GET requests"""
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("directory", str(ROOT))
+        super().__init__(*args, **kwargs)
+
+    def send_head(self):
+        """Apply the same public-file allowlist to GET and HEAD requests."""
+        path = urlsplit(self.path).path
         # Route root to landing.html
-        if self.path == "/" or self.path == "/index.html":
-            self.path = "/landing.html"
+        if path in ("/", "/index.html"):
+            path = "/landing.html"
 
         # API redirect to Streamlit
-        if self.path == "/app":
+        if path == "/app":
             self.send_response(302)
             self.send_header("Location", f"http://localhost:{STREAMLIT_PORT}")
             self.end_headers()
             return
 
-        # Serve static files
-        return super().do_GET()
+        if path not in PUBLIC_FILES:
+            self.send_error(404, "File not found")
+            return None
+        self.path = path
+        return super().send_head()
 
     def log_message(self, format, *args):
         """Log requests"""
@@ -38,36 +47,44 @@ class Handler(SimpleHTTPRequestHandler):
 def start_streamlit():
     """Start Streamlit in background"""
     print(f"Starting Streamlit on port {STREAMLIT_PORT}...")
-    subprocess.Popen([
-        "python", "-m", "streamlit", "run", "app_modern.py",
+    return subprocess.Popen([
+        sys.executable, "-m", "streamlit", "run", "app_modern.py",
         "--server.port", str(STREAMLIT_PORT),
+        "--server.address", "127.0.0.1",
+        "--server.headless", "true",
+        "--browser.gatherUsageStats", "false",
         "--logger.level", "error"
-    ])
-    time.sleep(3)
-    print(f"[OK] Streamlit started on http://localhost:{STREAMLIT_PORT}")
+    ], cwd=ROOT)
 
 
 def start_http_server():
     """Start HTTP server"""
     print(f"Starting HTTP server on port {PORT}...")
-    server = HTTPServer(("localhost", PORT), Handler)
+    server = ThreadingHTTPServer(("localhost", PORT), Handler)
     print(f"[OK] Server running on http://localhost:{PORT}")
     print("\nAccess:")
     print(f"  Landing page: http://localhost:{PORT}")
     print(f"  OSINT App: http://localhost:{STREAMLIT_PORT}")
     print(f"  Or click: http://localhost:{PORT}/app")
     print("\nPress Ctrl+C to stop\n")
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":
-    # Start Streamlit in background
-    streamlit_thread = threading.Thread(target=start_streamlit, daemon=True)
-    streamlit_thread.start()
+    process = start_streamlit()
 
     # Start HTTP server
     try:
         start_http_server()
     except KeyboardInterrupt:
         print("\n\nShutting down...")
-        exit(0)
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()

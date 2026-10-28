@@ -8,7 +8,7 @@ from osint_agent.graph import _parse_json_block, _sanitize
 
 @pytest.mark.parametrize(
     "host",
-    ["localhost", "127.0.0.1", "10.0.0.5", "192.168.1.1", "169.254.169.254", "0.0.0.0", "::1"],
+    ["localhost", "127.0.0.1", "10.0.0.5", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1"],
 )
 def test_private_hosts_blocked(host):
     assert tools._is_public_host(host) is False
@@ -145,3 +145,16 @@ def test_graph_sanitize_drops_dangling_edges():
 
 def test_graph_parse_fenced_json():
     assert _parse_json_block('```json\n{"nodes": [], "edges": []}\n```') == {"nodes": [], "edges": []}
+
+
+def test_relationship_graph_html_still_renders():
+    from osint_agent.graph import build_graph_html
+
+    graph = {
+        "nodes": [{"id": "target", "label": "Target", "group": "identifier"},
+                  {"id": "source", "label": "Source", "group": "source"}],
+        "edges": [{"from": "target", "to": "source", "label": "evidence", "confidence": "high"}],
+    }
+    output = build_graph_html(graph)
+    assert "Target" in output and "Source" in output
+    assert "evidence" in output

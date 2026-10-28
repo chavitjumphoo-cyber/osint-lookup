@@ -4,6 +4,7 @@
 
 # Virtual Environment
 venv/
+.venv/
 env/
 ENV/
 
@@ -41,3 +42,4 @@ server.log
 
 # Audit logs (optional)
 audit/*.json
+audit/*.jsonl

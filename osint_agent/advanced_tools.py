@@ -4,8 +4,6 @@
 - stylometry: character n-gram author correlation
 """
 
-import asyncio
-import hashlib
 import io
 import re
 import urllib.parse
@@ -15,12 +13,12 @@ from typing import Any
 
 import httpx
 import phonenumbers
-import requests
-from phonenumbers import PhoneNumberType, carrier, geocoder, timezone
+from phonenumbers import PhoneNumberType
 from PIL import Image
 
 # Import enhanced phone scanner
 from .phone_enhanced import enhanced_phone_scan as _enhanced_scan
+from .network import download_image
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -103,7 +101,6 @@ async def scan_phone(phone_number: str, default_region: str = "TH") -> PhoneScan
         )
 
     e164 = result["e164"]
-    clean_digits = re.sub(r"\D", "", e164)
     footprints = result["footprints"]
 
     # ตรวจ WhatsApp (probe wa.me)
@@ -135,7 +132,6 @@ async def scan_phone(phone_number: str, default_region: str = "TH") -> PhoneScan
             ddg_url = f"https://html.duckduckgo.com/html/?q={query_parts}"
             resp = await client.get(ddg_url)
             if resp.status_code == 200:
-                text_lower = resp.text.lower()
                 name_patterns = [
                     r'<a class="result__a"[^>]*>([^<]+)</a>',
                     r'<b>([A-Z][a-z]+ [A-Z][a-z]+)</b>',
@@ -159,98 +155,10 @@ async def scan_phone(phone_number: str, default_region: str = "TH") -> PhoneScan
         line_type=result["line_type"],
         timezones=result["timezones"],
         whatsapp_active=whatsapp_active,
+        whatsapp_url=wa_url,
         footprint_urls=footprints,
-        discovered_names=discovered_names,
+        associated_names=discovered_names,
     )
-
-    is_valid = phonenumbers.is_valid_number(parsed)
-    if not is_valid:
-        return PhoneScanResult(
-            raw_input=phone_number,
-            e164=phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164),
-            is_valid=False,
-            country_code=parsed.country_code or 0,
-            country_iso=phonenumbers.region_code_for_number(parsed) or "",
-            country_name=geocoder.description_for_number(parsed, "th") or "",
-            carrier_name="",
-            line_type="เบอร์ไม่ถูกต้อง",
-            timezones=[],
-            error="เบอร์ไม่ถูกต้องหรือยังไม่ได้จัดสรร",
-        )
-
-    e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-    clean_digits = re.sub(r"\D", "", e164)
-    c_code = parsed.country_code
-    iso = phonenumbers.region_code_for_number(parsed) or ""
-    c_name = geocoder.description_for_number(parsed, "th") or geocoder.description_for_number(parsed, "en") or ""
-    car_name = carrier.name_for_number(parsed, "th") or carrier.name_for_number(parsed, "en") or ""
-    l_type = _get_line_type_name(phonenumbers.number_type(parsed))
-    tz_list = list(timezone.time_zones_for_number(parsed))
-
-    # สร้าง footprint URLs
-    footprints = {
-        "whatsapp": f"https://wa.me/{clean_digits}",
-        "telegram": f"https://t.me/+{clean_digits}",
-        "truecaller": f"https://www.truecaller.com/search/{iso.lower()}/{clean_digits}",
-        "google_exact": f'https://www.google.com/search?q="{e164}"',
-        "google_social": f'https://www.google.com/search?q="{clean_digits}"+site:instagram.com+OR+site:facebook.com+OR+site:twitter.com',
-    }
-
-    # ตรวจ WhatsApp (probe wa.me)
-    whatsapp_active = None
-    wa_url = footprints["whatsapp"]
-    try:
-        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
-            resp = await client.get(wa_url)
-            if resp.status_code == 200:
-                if "action-send" in resp.text or "send?phone=" in resp.text or "Chat on WhatsApp" in resp.text:
-                    whatsapp_active = True
-                else:
-                    whatsapp_active = False
-    except Exception:
-        whatsapp_active = None
-
-    # ค้นหา DuckDuckGo เพื่อหาชื่อที่เกี่ยวข้อง
-    discovered_names: list[str] = []
-    variations = _generate_phone_formats(parsed)
-    query_parts = "+OR+".join(f'%22{urllib.parse.quote(v)}%22' for v in variations[:3])
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-
-    try:
-        search_url = f"https://html.duckduckgo.com/html/?q={query_parts}"
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers=headers) as client:
-            ddg_resp = await client.get(search_url)
-            if ddg_resp.status_code == 200:
-                html_text = ddg_resp.text
-                # แยกชื่อที่มีตัวพิมพ์ใหญ่
-                for title_match in re.finditer(r'<a[^>]+class=\"result__snippet\"[^>]*>(.*?)</a>', html_text, re.DOTALL):
-                    snippet = re.sub(r'<[^>]+>', '', title_match.group(1)).strip()
-                    possible_names = re.findall(r'\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?\b', snippet)
-                    for name in possible_names:
-                        if name not in ("WhatsApp Web", "Google Play", "App Store", "Privacy Policy"):
-                            discovered_names.append(name)
-    except Exception:
-        pass
-
-    return PhoneScanResult(
-        raw_input=phone_number,
-        e164=e164,
-        is_valid=True,
-        country_code=c_code,
-        country_iso=iso,
-        country_name=c_name,
-        carrier_name=car_name,
-        line_type=l_type,
-        timezones=tz_list,
-        whatsapp_active=whatsapp_active,
-        whatsapp_url=wa_url if whatsapp_active else None,
-        footprint_urls=footprints,
-        associated_names=list(set(discovered_names))[:5],
-    )
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Avatar Analyzer (dHash matching)
@@ -262,9 +170,7 @@ def compute_dhash(source: str | bytes, hash_size: int = 8) -> str:
     if isinstance(source, str):
         # ถ้าเป็น URL ดาวน์โหลดมาก่อน
         if source.startswith("http"):
-            resp = requests.get(source, timeout=10)
-            resp.raise_for_status()
-            source = resp.content
+            source, _ = download_image(source, timeout=10)
 
     if isinstance(source, bytes):
         img = Image.open(io.BytesIO(source))

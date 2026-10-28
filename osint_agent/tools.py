@@ -11,20 +11,21 @@ Advanced Tools (inspired by osint-d2):
 """
 
 import base64
-import hashlib
-import ipaddress
-import random
 import re
 import shutil
-import socket
 import subprocess
-import threading
-import time
 import asyncio
 from urllib.parse import urljoin, urlparse, quote_plus
 
 import requests
 from bs4 import BeautifulSoup
+
+# Re-export existing names so callers of tools.py remain compatible.
+from .network import (
+    DOMAIN_JITTER, DOMAIN_MIN_INTERVAL, MAX_REDIRECTS, RATE_LIMITER,
+    DomainRateLimiter, UnsafeURLError, _check_url, _is_public_host,
+    download_image, safe_get,
+)
 
 from . import advanced_tools  # import module ใหม่
 from . import synint_agents  # SYNINT-inspired agents
@@ -50,34 +51,6 @@ IMAGE_MEDIA_TYPES = {
 # ชื่อผู้ใช้ที่ยอมให้ส่งเข้า sherlock — กันการแทรก argument (เช่น "--json /etc/passwd")
 USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
-DOMAIN_MIN_INTERVAL = 2.0
-DOMAIN_JITTER = 1.5
-
-
-class DomainRateLimiter:
-    """เว้นระยะการเรียกโดเมนเดียวกันอย่างน้อย min_interval วินาที + หน่วงสุ่ม กันโดนบล็อก"""
-
-    def __init__(self, min_interval: float, jitter: float):
-        self.min_interval = min_interval
-        self.jitter = jitter
-        self._next_allowed: dict = {}
-        self._lock = threading.Lock()
-
-    def wait(self, host: str) -> float:
-        host = (host or "").lower()
-        with self._lock:
-            now = time.monotonic()
-            start = max(now, self._next_allowed.get(host, 0.0))
-            self._next_allowed[host] = start + self.min_interval + random.uniform(0, self.jitter)
-        delay = start - now
-        if delay > 0:
-            time.sleep(delay)
-        return delay
-
-
-RATE_LIMITER = DomainRateLimiter(DOMAIN_MIN_INTERVAL, DOMAIN_JITTER)
-
-
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Multi-Platform Scanner (30+ platforms)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -87,7 +60,7 @@ def scan_platforms_schema():
     return {
         "name": "scan_platforms",
         "description": (
-            "สแกน username ข้าม 30+ แพลตฟอร์มพร้อมกัน — เร็วกว่า sherlock และ real-time\n\n"
+            "ตรวจสอบ username ข้าม 30+ แพลตฟอร์ม แยกผลยืนยันแล้วออกจากผลที่ยังตรวจสอบไม่ได้\n\n"
             "แพลตฟอร์มที่รองรับ:\n"
             "- Social: Facebook, Instagram, Twitter/X, TikTok, LinkedIn, YouTube, Snapchat, Telegram\n"
             "- Developer: GitHub, GitLab, Stack Overflow, HackerRank, LeetCode, Kaggle\n"
@@ -352,97 +325,13 @@ def _run_sherlock(username: str) -> dict:
     return _plain("\n".join(lines))
 
 
-def _is_public_host(host: str) -> bool:
-    """กัน SSRF — ปฏิเสธ hostname ที่ชี้ไป loopback/private/reserved"""
-    if not host:
-        return False
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
-        return False
-    for info in infos:
-        try:
-            ip = ipaddress.ip_address(info[4][0])
-        except ValueError:
-            return False
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            return False
-    return True
-
-
-MAX_REDIRECTS = 5
-
-
-class UnsafeURLError(Exception):
-    pass
-
-
-def _check_url(url: str) -> str:
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise UnsafeURLError("รองรับเฉพาะ http:// และ https://")
-    host = parsed.hostname or ""
-    if not _is_public_host(host):
-        raise UnsafeURLError("ที่อยู่นี้ไม่ใช่เว็บสาธารณะ (ถูกบล็อกเพื่อความปลอดภัย)")
-    return host
-
-
-def safe_get(url: str, timeout: float, stream: bool = False, headers: dict | None = None):
-    """GET ที่ตรวจ SSRF ทุก hop ของ redirect และเว้นระยะต่อโดเมน"""
-    merged = {"User-Agent": USER_AGENT, "Accept-Language": "th,en;q=0.8", **(headers or {})}
-    current = url
-    for _ in range(MAX_REDIRECTS + 1):
-        host = _check_url(current)
-        RATE_LIMITER.wait(host)
-        response = requests.get(
-            current, timeout=timeout, headers=merged, stream=stream, allow_redirects=False
-        )
-        if response.is_redirect or response.status_code in (301, 302, 303, 307, 308):
-            location = response.headers.get("Location")
-            response.close()
-            if not location:
-                raise UnsafeURLError("redirect ไม่มีปลายทาง")
-            current = urljoin(current, location)
-            continue
-        return response
-    raise UnsafeURLError(f"redirect เกิน {MAX_REDIRECTS} ครั้ง")
-
-
 def _download_image(url: str) -> dict | None:
     """ดาวน์โหลดรูปเดียว คืน content block ของ Anthropic หรือ None ถ้าใช้ไม่ได้"""
     try:
-        response = safe_get(url, timeout=IMAGE_TIMEOUT, stream=True)
-    except (requests.RequestException, UnsafeURLError):
+        data, media_type = download_image(url, timeout=IMAGE_TIMEOUT, max_bytes=MAX_IMAGE_BYTES)
+    except (requests.RequestException, UnsafeURLError, ValueError):
         return None
 
-    if response.status_code >= 400:
-        return None
-
-    media_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-    if media_type not in IMAGE_MEDIA_TYPES:
-        return None
-
-    chunks = []
-    total = 0
-    try:
-        for chunk in response.iter_content(65536):
-            total += len(chunk)
-            if total > MAX_IMAGE_BYTES:
-                return None
-            chunks.append(chunk)
-    except requests.RequestException:
-        return None
-    finally:
-        response.close()
-
-    data = b"".join(chunks)
     if len(data) < 1024:
         return None
 
@@ -450,7 +339,7 @@ def _download_image(url: str) -> dict | None:
         "type": "image",
         "source": {
             "type": "base64",
-            "media_type": IMAGE_MEDIA_TYPES[media_type],
+            "media_type": media_type,
             "data": base64.b64encode(data).decode("ascii"),
         },
     }
@@ -937,11 +826,11 @@ def compare_avatars_schema():
             "properties": {
                 "avatar_url_1": {
                     "type": "string",
-                    "description": "URL รูปที่ 1 (หรือ path ในเครื่อง)",
+                    "description": "URL รูปที่ 1 บนเว็บสาธารณะ",
                 },
                 "avatar_url_2": {
                     "type": "string",
-                    "description": "URL รูปที่ 2 (หรือ path ในเครื่อง)",
+                    "description": "URL รูปที่ 2 บนเว็บสาธารณะ",
                 },
             },
             "required": ["avatar_url_1", "avatar_url_2"],
@@ -951,6 +840,8 @@ def compare_avatars_schema():
 
 def _run_compare_avatars(url1: str, url2: str) -> dict:
     try:
+        _check_url(url1)
+        _check_url(url2)
         result = advanced_tools.compare_avatars(url1, url2)
         if result.get("error"):
             return _plain(f"ข้อผิดพลาด: {result['error']}")

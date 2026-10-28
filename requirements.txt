@@ -1,7 +1,14 @@
-streamlit
-anthropic
-requests
-beautifulsoup4
-pyvis
-phonenumbers
-markdown
+# UI and reports
+streamlit==1.66.1
+markdown==3.11.2
+bleach==6.4.0
+pyvis==0.3.2
+
+# Agent and public-data tools
+anthropic==2.3.0
+requests==2.34.2
+httpx==0.28.1
+beautifulsoup4==4.15.0
+ddgs==9.16.1
+phonenumbers==9.0.42
+Pillow==13.0.0

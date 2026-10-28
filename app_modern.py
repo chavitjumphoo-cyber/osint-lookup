@@ -1,18 +1,19 @@
 """OSINT Lookup — Modern UI matching landing page theme"""
 
-import hmac
 import html
+import re
 from datetime import datetime
 import streamlit as st
 
 from osint_agent.access import audit
-from osint_agent.agent import _build_client, read_config, run_osint_lookup
+from osint_agent.agent import (
+    MODEL, _build_client, _client_overrides, _configured_model,
+    list_provider_models, run_osint_lookup,
+)
 from osint_agent.graph import build_graph_html, build_relationship_graph
 from osint_agent.report_export import build_report_html
 
 st.set_page_config(page_title="OSINT Lookup", page_icon="◆", layout="wide", initial_sidebar_state="collapsed")
-
-CONFIG = read_config()
 
 # Main Investigation UI (ไม่ต้อง login)
 ACTOR = {"name": "user", "unit": "-"}
@@ -383,8 +384,13 @@ st.markdown("### 🎯 เริ่มการสืบสวน", unsafe_allow_
 with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ config จาก .env หากไม่กำหนด)", expanded=False):
     st.info("💡 ระบบจะใช้ .env configuration เป็นค่าเริ่มต้น คุณสามารถ override ได้ด้านล่าง")
 
-    st.markdown("**Claude/Anthropic API (Optional)**")
-    st.markdown("ถ้าใช้ MaxPlus ให้ใส่ ccsk-... key")
+    providers = {
+        "ใช้ .env / Anthropic (ค่าเดิม)": ("", "", ""),
+        "MaxPlus GPT": ("openai", "https://api.maxplus-ai.cc/v1", ""),
+        "MaxPlus Claude": ("anthropic", "https://api.maxplus-ai.cc", "claude-sonnet-4-6"),
+    }
+    selection = st.selectbox("ผู้ให้บริการ AI", list(providers), key="api_provider")
+    provider, default_base, default_model = providers[selection]
     anthropic_key = st.text_input(
         "Anthropic/MaxPlus API Key",
         type="password",
@@ -392,13 +398,45 @@ with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ 
         help="Override Anthropic/MaxPlus key จาก .env (ถ้าไม่กำหนด ให้ใช้จาก .env)",
         key="anthropic_api_key"
     )
+    base_url = st.text_input(
+        "API Base URL", value=default_base, key=f"api_base_url_{selection}",
+        placeholder="เว้นว่างเพื่อใช้ .env หรือ Anthropic โดยตรง",
+        help="MaxPlus GPT ใช้ https://api.maxplus-ai.cc/v1 หรือ URL ของ pool จาก Dashboard",
+    ).strip()
+    if provider:
+        st.caption("API key ต้องมีสิทธิ์ใช้ pool ที่เลือกใน MaxPlus Dashboard")
+    model_settings = {
+        "anthropic": anthropic_key.strip() or st.session_state.get("saved_anthropic_key", ""),
+        "provider": provider, "base_url": base_url,
+    }
+    models_key = f"available_models_{selection}_{base_url}"
+    if st.button("โหลดรายการโมเดล / ตรวจสอบ key", key="load_provider_models"):
+        try:
+            with st.spinner("กำลังตรวจสอบ key และโหลดโมเดล…"):
+                models = list_provider_models(model_settings)
+                if not models:
+                    raise RuntimeError("ไม่พบโมเดลสำหรับ key นี้ กรุณาตรวจ pool ใน Dashboard")
+                st.session_state[models_key] = models
+            st.success("เชื่อมต่อสำเร็จ เลือก Model ID แล้วบันทึกการตั้งค่า")
+        except Exception as exc:
+            st.session_state.pop(models_key, None)
+            st.error(f"เชื่อมต่อไม่สำเร็จ: {exc}")
+    available_models = st.session_state.get(models_key, [])
+    if available_models:
+        model = st.selectbox("Model ID", available_models, key=f"api_model_list_{models_key}")
+    else:
+        model = st.text_input(
+            "Model ID", value=default_model, key=f"api_model_{selection}",
+            placeholder="โหลดรายการโมเดลด้านบน หรือกรอก ID จาก Dashboard",
+            help=f"เว้นว่างเพื่อใช้ OSINT_MODEL จาก .env; Anthropic เดิมใช้ {MODEL}",
+        ).strip()
 
     st.markdown("**Google Search API (Optional)**")
     google_key = st.text_input(
         "Google API Key",
         type="password",
         placeholder="AIzaSy...",
-        help="ใช้สำหรับค้นหา Google แบบ API (ถ้าไม่ใส่จะใช้ googlesearch-python)",
+        help="เก็บการตั้งค่าเดิมไว้ได้ ปัจจุบันการค้นหาใช้ DuckDuckGo โดยไม่ต้องใช้ Google key",
         key="google_api_key"
     )
     google_cx = st.text_input(
@@ -409,22 +447,16 @@ with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ 
     )
 
     if st.button("💾 บันทึก API Keys"):
-        saved_count = 0
-        # เก็บใน session state (เฉพาะที่มีค่า)
-        if anthropic_key:
-            st.session_state["saved_anthropic_key"] = anthropic_key
-            saved_count += 1
-        if google_key:
-            st.session_state["saved_google_key"] = google_key
-            saved_count += 1
-        if google_cx:
-            st.session_state["saved_google_cx"] = google_cx
-            saved_count += 1
-
-        if saved_count > 0:
-            st.success(f"✓ บันทึก {saved_count} API Key แล้ว")
+        if provider == "openai" and not model:
+            st.error("กรุณาโหลดรายการโมเดลหรือกรอก Model ID ก่อนบันทึก")
         else:
-            st.info("ไม่มีการบันทึก — ระบบจะใช้ .env configuration")
+            for name, value in (("anthropic_key", anthropic_key), ("google_key", google_key),
+                                ("google_cx", google_cx)):
+                if value.strip():
+                    st.session_state[f"saved_{name}"] = value.strip()
+            for name, value in (("provider", provider), ("base_url", base_url), ("model", model)):
+                st.session_state[f"saved_{name}"] = value
+            st.success("✓ บันทึกการตั้งค่า API ใน session นี้แล้ว")
 
 st.markdown("---")
 
@@ -452,159 +484,165 @@ with st.form("investigate"):
 
 st.markdown('</div>', unsafe_allow_html=True)
 
+
+def _saved_api_keys():
+    return {
+        name: st.session_state[key]
+        for name, key in (
+            ("anthropic", "saved_anthropic_key"),
+            ("google", "saved_google_key"),
+            ("google_cx", "saved_google_cx"),
+            ("provider", "saved_provider"),
+            ("base_url", "saved_base_url"),
+            ("model", "saved_model"),
+        )
+        if st.session_state.get(key)
+    }
+
+
+def _timeline_html(events):
+    items = []
+    for event in events:
+        kind = event.get("kind", "note")
+        text = html.escape(event.get("text", ""))
+        if kind in ("search", "tool", "done"):
+            icon = {"search": "🔍", "tool": "⚙️", "done": "✓"}[kind]
+            state = "success" if kind == "done" else "loading"
+            items.append(
+                f'<div class="timeline-item"><div class="timeline-icon {state}">{icon}</div>'
+                f'<div><div class="timeline-title">{text}</div></div></div>'
+            )
+        elif kind == "result" and items:
+            items[-1] = items[-1].replace("loading", "success")
+    return '<div class="timeline">' + "".join(items) + "</div>"
+
+
 if submitted:
     value = identifier_value.strip()
     if not value:
         st.warning("กรุณากรอกค่าที่ต้องการตรวจสอบ")
         st.stop()
 
-    audit(
-        "search",
-        ACTOR,
-        target_type=identifier_type,
-        target_value=value,
-        context=context.strip(),
-    )
-
+    audit("search", ACTOR, target_type=identifier_type, target_value=value, context=context.strip())
     st.session_state.setdefault("history", []).append(
         {"type": identifier_type, "value": value, "time": datetime.now().strftime("%H:%M")}
     )
+    st.session_state["investigation"] = {
+        "type": identifier_type,
+        "value": value,
+        "context": context,
+        "generated_at": datetime.now(),
+        "status": "running",
+        "events": [],
+        "report": "",
+        "graph": {"nodes": [], "edges": []},
+        "graph_html": None,
+        "graph_error": "",
+        "error": "",
+    }
 
-    # Investigation UI
+result = st.session_state.get("investigation")
+if result:
     st.markdown("---")
-    st.markdown(
-        f"""
-    <div class="inv-card">
-        <div class="inv-header">
-            <span class="inv-icon">🔍</span>
-            <h2 class="inv-title">{html.escape(value)}</h2>
-            <span class="badge badge-info">⏳ กำลังดำเนินการ</span>
-        </div>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
+    badge = st.empty()
     left, right = st.columns([1, 1.5], gap="large")
-
     with left:
         st.markdown("#### 📋 Timeline")
         timeline_container = st.empty()
-
     with right:
         st.markdown("#### 📊 รายงาน")
         report_area = st.empty()
-        report_area.markdown(
-            '<div class="report"><p>🔄 AI กำลังเลือกเครื่องมือและรวบรวมหลักฐาน...</p></div>',
-            unsafe_allow_html=True,
-        )
 
-    timeline_items = []
-    ICONS = {"step": "○", "search": "🔍", "tool": "⚙️", "result": "↳", "done": "✓"}
+    if submitted:
+        badge.info(f"⏳ กำลังตรวจสอบ {result['value']}")
+        report_area.info("AI กำลังเลือกเครื่องมือและรวบรวมหลักฐาน...")
 
-    def on_event(event):
-        kind = event.get("kind", "note")
-        text = event.get("text", "")
+        def on_event(event):
+            result["events"].append({
+                "kind": event.get("kind", "note"),
+                "text": str(event.get("text", "")),
+            })
+            timeline_container.markdown(_timeline_html(result["events"]), unsafe_allow_html=True)
 
-        if kind in ("search", "tool"):
-            icon = ICONS.get(kind, "○")
-            timeline_items.append(
-                f"""
-            <div class="timeline-item">
-                <div class="timeline-icon loading">{icon}</div>
-                <div>
-                    <div class="timeline-title">{html.escape(text)}</div>
-                </div>
-            </div>
-            """
+        api_keys = _saved_api_keys()
+        try:
+            result["report"] = run_osint_lookup(
+                identifier_type=result["type"],
+                identifier_value=result["value"],
+                context=result["context"],
+                on_event=on_event,
+                api_keys=api_keys or None,
             )
-        elif kind == "result":
-            if timeline_items:
-                timeline_items[-1] = timeline_items[-1].replace("loading", "success").replace(
-                    "○", "✓"
-                )
-        elif kind == "done":
-            timeline_items.append(
-                f"""
-            <div class="timeline-item">
-                <div class="timeline-icon success">✓</div>
-                <div>
-                    <div class="timeline-title">{html.escape(text)}</div>
-                </div>
-            </div>
-            """
-            )
+            result["status"] = "done"
+        except Exception as exc:
+            error = str(exc)
+            if getattr(exc, "status_code", None) == 401:
+                error = "API key ไม่ผ่านการยืนยัน (401) กรุณาตรวจผู้ให้บริการ, Base URL และ key แล้วบันทึกการตั้งค่าอีกครั้ง"
+            result.update(status="error", error=error)
 
-        timeline_html = '<div class="timeline">' + "".join(timeline_items) + "</div>"
-        timeline_container.markdown(timeline_html, unsafe_allow_html=True)
+        if result["report"]:
+            report_area.markdown(result["report"])
+            try:
+                with st.spinner("กำลังสร้างผังความสัมพันธ์…"):
+                    client = _build_client(**_client_overrides(api_keys))
+                    try:
+                        result["graph"] = build_relationship_graph(
+                            client, result["report"], model=_configured_model(api_keys),
+                        )
+                    finally:
+                        client.close()
+                    result["graph_html"] = build_graph_html(result["graph"])
+            except Exception as exc:
+                # A graph failure must not discard the report or its downloads.
+                result["graph_error"] = f"สร้างผังความสัมพันธ์ไม่สำเร็จ ({type(exc).__name__})"
 
-    try:
-        # ส่ง API Keys ไปยัง Backend (ถ้ามี override)
-        api_keys = {}
-        if "saved_anthropic_key" in st.session_state:
-            api_keys["anthropic"] = st.session_state["saved_anthropic_key"]
-        if "saved_google_key" in st.session_state:
-            api_keys["google"] = st.session_state["saved_google_key"]
-        if "saved_google_cx" in st.session_state:
-            api_keys["google_cx"] = st.session_state["saved_google_cx"]
-
-        # ถ้าไม่มี API keys ระบบจะใช้ .env configuration
-        report = run_osint_lookup(
-            identifier_type=identifier_type,
-            identifier_value=value,
-            context=context,
-            on_event=on_event,
-            api_keys=api_keys if api_keys else None,  # ส่ง None ถ้าไม่มี
-        )
-
-        # Final report
-        report_area.markdown(
-            f'<div class="report">{report}</div>',
-            unsafe_allow_html=True,
-        )
-
-        # Tabs for additional views
+    timeline_container.markdown(_timeline_html(result["events"]), unsafe_allow_html=True)
+    if result["error"]:
+        badge.error(f"ตรวจสอบไม่สำเร็จ: {result['value']}")
+        st.error(f"เกิดข้อผิดพลาด: {result['error']}")
+    elif result["report"]:
+        badge.success(f"✓ ตรวจสอบเสร็จสิ้น: {result['value']}")
+        report_area.markdown(result["report"])
         st.markdown("---")
         tab_report, tab_graph, tab_export = st.tabs(
             ["📄 รายงานเต็ม", "🕸️ ผังความสัมพันธ์", "💾 ส่งออก"]
         )
-
         with tab_report:
-            st.markdown(report, unsafe_allow_html=True)
-
+            st.markdown(result["report"])
         with tab_graph:
-            with st.spinner("กำลังสร้างผังความสัมพันธ์…"):
-                graph = build_relationship_graph(_build_client(), report)
-                graph_html = build_graph_html(graph)
-            if graph_html:
-                st.components.v1.html(graph_html, height=560, scrolling=False)
-                st.caption(
-                    f"{len(graph['nodes'])} โหนด · {len(graph.get('edges') or [])} ความสัมพันธ์"
-                )
+            if result["graph_error"]:
+                st.warning(result["graph_error"])
+            elif result["graph_html"]:
+                st.components.v1.html(result["graph_html"], height=560, scrolling=False)
+                graph = result["graph"]
+                st.caption(f"{len(graph['nodes'])} โหนด · {len(graph.get('edges') or [])} ความสัมพันธ์")
             else:
                 st.info("รายงานนี้ยังไม่มีความสัมพันธ์ที่ยืนยันได้")
-
         with tab_export:
             col1, col2 = st.columns(2)
+            filename = re.sub(r"[^\w.-]", "_", result["value"][:20])
             with col1:
                 html_export = build_report_html(
-                    value, report, graph if graph_html else None
+                    report_md=result["report"],
+                    identifier_type=result["type"],
+                    identifier_value=result["value"],
+                    context=result["context"],
+                    steps=[
+                        event["text"] for event in result["events"]
+                        if event["kind"] in ("search", "tool", "done")
+                    ],
+                    stats={
+                        kind: sum(event["kind"] == kind for event in result["events"])
+                        for kind in ("search", "tool")
+                    },
+                    generated_at=result["generated_at"],
                 )
                 st.download_button(
-                    "📥 ดาวน์โหลด HTML",
-                    html_export,
-                    file_name=f"report_{value[:20]}.html",
-                    mime="text/html",
-                    use_container_width=True,
+                    "📥 ดาวน์โหลด HTML", html_export,
+                    file_name=f"report_{filename}.html", mime="text/html", use_container_width=True,
                 )
             with col2:
                 st.download_button(
-                    "📥 ดาวน์โหลด Markdown",
-                    report,
-                    file_name=f"report_{value[:20]}.md",
-                    mime="text/markdown",
-                    use_container_width=True,
+                    "📥 ดาวน์โหลด Markdown", result["report"],
+                    file_name=f"report_{filename}.md", mime="text/markdown", use_container_width=True,
                 )
-
-    except Exception as exc:
-        st.error(f"เกิดข้อผิดพลาด: {exc}")

@@ -9,6 +9,12 @@ import html
 from datetime import datetime
 
 import markdown
+import bleach
+
+REPORT_TAGS = {
+    "a", "blockquote", "br", "code", "del", "em", "h1", "h2", "h3", "h4", "h5", "h6",
+    "hr", "li", "ol", "p", "pre", "strong", "table", "tbody", "td", "th", "thead", "tr", "ul",
+}
 
 PRINT_CSS = """
 @page { size: A4; margin: 18mm 16mm; }
@@ -46,6 +52,10 @@ def build_report_html(
 ) -> str:
     generated_at = generated_at or datetime.now()
     body = markdown.markdown(report_md or "", extensions=["tables", "sane_lists"])
+    body = bleach.clean(
+        body, tags=REPORT_TAGS, attributes={"a": ["href", "title"]},
+        protocols={"http", "https", "mailto"}, strip=True,
+    )
     esc = html.escape
 
     meta_rows = [
