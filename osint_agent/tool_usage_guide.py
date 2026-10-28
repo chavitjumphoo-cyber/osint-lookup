@@ -107,11 +107,58 @@ Output: Verified ✓ (MX records match)
 Input: '"0812345678" site:facebook.com'
 Output: [Facebook profiles containing phone number]
 ```
-**Tips:**
-- ใช้ site: เพื่อค้นเฉพาะเว็บ
-- ใช้ "" เพื่อค้นคำที่ตรงทุกอักษระ
-- ใช้ OR เพื่อค้นหลายคำ
-**Chain ต่อด้วย:** fetch_page (URL ที่เจอ) → extract_entities
+
+**IMPORTANT: ต้องใช้หลายครั้งด้วยคำค้นต่างกัน!**
+
+**Advanced Search Operators:**
+- `site:domain.com` - ค้นเฉพาะเว็บ
+- `"exact match"` - ค้นคำที่ตรงทุกอักษระ
+- `OR` - ค้นหลายคำ (เช่น `facebook OR twitter`)
+- `intitle:` - ค้นในหัวข้อ
+- `intext:` - ค้นในเนื้อหา
+- `filetype:` - ค้นไฟล์ (pdf, doc)
+- `-` - ไม่รวม (เช่น `python -snake`)
+
+**Username Search Strategy (ต้องลองทั้งหมด):**
+```
+1. "username" (basic)
+2. "username" profile
+3. "username" github
+4. "username" twitter OR facebook OR instagram
+5. "username" site:github.com
+6. "username" site:linkedin.com
+7. "username" CTF OR hacker OR security (ถ้าดูเหมือน tech user)
+8. "username" gaming OR twitch OR steam (ถ้าพบ gaming platforms)
+```
+
+**Phone Search Strategy:**
+```
+1. "0812345678"
+2. "081-234-5678"
+3. "081 234 5678"
+4. "0812345678" facebook
+5. "0812345678" line OR instagram
+```
+
+**Email Search Strategy:**
+```
+1. "email@domain.com"
+2. "email" site:github.com
+3. "email" site:linkedin.com
+4. "email" breach OR leak
+```
+
+**Name Search Strategy:**
+```
+1. "John Doe"
+2. "John Doe" linkedin
+3. "John Doe" facebook
+4. "John Doe" twitter
+5. "John Doe" site:github.com
+6. "John Doe" company OR organization
+```
+
+**Chain ต่อด้วย:** fetch_page (URL ที่เจอ) → extract_entities → google_search (ข้อมูลใหม่)
 
 ### 10. fetch_page
 **ใช้เมื่อ:** มี URL ต้องการดึงเนื้อหาหน้าเว็บ
@@ -178,21 +225,41 @@ Output: Confidence: 85%, Evidence: Same name, Similar bio, Location match
 1. phone_info(phone) → รู้ carrier
 2. scan_phone_advanced(phone) → เจอชื่อ "สมชาย"
 3. google_search('"สมชาย" "0812345678"') → เจอ Facebook
-4. fetch_page(facebook_url) → ดึงข้อมูลโปรไฟล์
-5. extract_entities(page_content) → เจอ email, username
-6. breach_check(email) → ตรวจสอบ breach
-7. scan_platforms(username) → หาแพลตฟอร์มอื่น
+4. google_search('"สมชาย" site:facebook.com') → หาโปรไฟล์เพิ่ม
+5. fetch_page(facebook_url) → ดึงข้อมูลโปรไฟล์
+6. extract_entities(page_content) → เจอ email, username
+7. breach_check(email) → ตรวจสอบ breach
+8. scan_platforms(username) → หาแพลตฟอร์มอื่น
 ```
 
-## Workflow 2: Username Investigation
+## Workflow 2: Username Investigation (Aggressive Search)
 ```
 1. scan_platforms(username) → เจอ GitHub, Twitter, Instagram
-2. fetch_page(github_url) → ดึงโปรไฟล์ GitHub
-3. extract_entities(content) → เจอ email "john@email.com"
-4. breach_check(email) → ตรวจสอบ breach
-5. email_harvest(email) → หา email variants
-6. google_search('"john@email.com"') → หาข้อมูลเพิ่ม
-7. sherlock_username(username) → ค้นหาแพลตฟอร์มเพิ่ม
+2. google_search('"username"') → ค้นพื้นฐาน
+3. google_search('"username" profile') → ค้นโปรไฟล์
+4. google_search('"username" github') → ค้น GitHub
+5. google_search('"username" CTF OR hacker') → ค้นด้าน security
+6. google_search('"username" site:github.com') → ค้นเฉพาะ GitHub
+7. fetch_page(github_url) → ดึงโปรไฟล์ GitHub
+8. extract_entities(content) → เจอ email "john@email.com"
+9. breach_check(email) → ตรวจสอบ breach
+10. google_search('"john@email.com"') → ค้น email
+11. email_harvest(email) → หา email variants
+12. sherlock_username(username) → ค้นหาแพลตฟอร์มเพิ่ม
+```
+
+## Workflow 3: Username Investigation with Pivoting (ตัวอย่าง Oree1ce)
+```
+1. scan_platforms("Oree1ce") → เจอ 12 แพลตฟอร์ม
+2. google_search('"Oree1ce"') → ค้นพื้นฐาน
+3. google_search('"Oree1ce" CTF') → เจอ CTF player!
+4. google_search('"Oree1ce" site:ctftime.org') → หาโปรไฟล์ CTF
+5. google_search('"Oree1ce" RPCACYBERCLUB') → เจอชื่อทีม!
+6. google_search('"RPCACYBERCLUB" members') → หาสมาชิกทีม
+7. fetch_page(ctf_profile) → ดึงข้อมูล CTF
+8. extract_entities(content) → เจอชื่อจริง, email, teammates
+9. breach_check(email) → ตรวจสอบ
+10. scan_platforms(teammate_usernames) → หาเพื่อนร่วมทีม
 ```
 
 ## Workflow 3: Email Investigation
@@ -222,9 +289,19 @@ Output: Confidence: 85%, Evidence: Same name, Similar bio, Location match
 ## ✅ DO:
 - เริ่มด้วย tool ที่ตรงที่สุดกับ input type
 - Chain tools ทันทีเมื่อได้ข้อมูลใหม่
-- ใช้ google_search บ่อยๆ กับข้อมูลใหม่
+- **ใช้ google_search อย่างน้อย 5-7 queries ต่อ identifier**
+- **Pivot ทันทีเมื่อเจอข้อมูลใหม่** (ชื่อทีม, องค์กร, เพื่อน)
 - Extract entities จากทุกหน้าเว็บที่ดึงมา
 - เก็บหลักฐานและบันทึกแหล่งที่มา
+- **ลอง search operators หลากหลาย** (site:, intitle:, filetype:)
+
+## ❌ DON'T:
+- **อย่า google_search แค่ 1-2 รอบแล้วยอมแพ้** ❗
+- อย่า google_search คำเดิมซ้ำ
+- อย่า scan_platforms username เดิมซ้ำ
+- **อย่าพลาดการ pivot** เมื่อเจอชื่อทีม/องค์กร/คนรู้จัก
+- อย่าลืม chain tools ต่อเมื่อได้ข้อมูลใหม่
+- **อย่าหยุดเร็วเกินไป** - ถ้ายังมี search query ที่ไม่ได้ลอง ให้ลองต่อ
 
 ## ❌ DON'T:
 - อย่า google_search คำเดิมซ้ำ
