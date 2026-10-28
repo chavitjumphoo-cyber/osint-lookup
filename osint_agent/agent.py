@@ -11,6 +11,7 @@ import os
 from anthropic import Anthropic
 
 from .system_prompt import SYSTEM_PROMPT
+from .enhanced_system_prompt import ENHANCED_SYSTEM_PROMPT
 from .tools import build_tool_list, execute_tool
 from .identity_triangulation import IdentityTriangulator
 
@@ -168,7 +169,8 @@ def run_osint_lookup(
         f"- ประเภท identifier: {identifier_type}\n"
         f"- บริบทจากผู้ใช้: {context if context else '(ไม่มี)'}\n"
     )
-    system = SYSTEM_PROMPT + context_block
+    # ใช้ Enhanced System Prompt ที่สอน AI ให้คิดและ chain tools
+    system = ENHANCED_SYSTEM_PROMPT + context_block
 
     messages = [
         {
