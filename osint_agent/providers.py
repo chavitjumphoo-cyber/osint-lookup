@@ -1,6 +1,7 @@
 """OpenAI-compatible transport for the existing agent's message/tool contract."""
 
 import json
+import time
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
 
@@ -13,8 +14,10 @@ def normalize_base_url(value: str, provider: str) -> str:
             or parts.username or parts.password or parts.query or parts.fragment):
         raise ValueError("API Base URL ต้องเป็น URL แบบ HTTP(S) ที่ไม่มี credentials, query หรือ fragment")
     path = parts.path.rstrip("/")
-    if path.endswith("/models"):
-        path = path[:-len("/models")]
+    for endpoint in ("/models", "/chat/completions", "/responses"):
+        if path.endswith(endpoint):
+            path = path[:-len(endpoint)]
+            break
     if provider == "anthropic" and path.endswith("/v1"):
         path = path[:-3]
     elif provider == "openai" and not path.endswith("/v1"):
@@ -30,6 +33,9 @@ class ProviderAPIError(RuntimeError):
             403: "API key ไม่มีสิทธิ์ใช้ pool หรือโมเดลนี้ กรุณาตรวจสิทธิ์ใน Dashboard",
             404: "ไม่พบ endpoint หรือโมเดล กรุณาตรวจ Base URL และโหลดรายการโมเดลอีกครั้ง",
             429: "ถึงขีดจำกัดการใช้งาน กรุณาตรวจเครดิตและ rate limit ใน Dashboard",
+            502: "เกตเวย์ของผู้ให้บริการติดต่อ upstream ไม่สำเร็จ กรุณาลองใหม่ภายหลัง",
+            503: "บริการของ pool/โมเดลยังไม่พร้อมใช้งาน กรุณาลองใหม่ภายหลัง หรือตรวจสถานะ pool และโมเดลใน Dashboard",
+            504: "เกตเวย์ของผู้ให้บริการรอ upstream นานเกินไป กรุณาลองใหม่ภายหลัง",
         }
         super().__init__(f"HTTP {status_code}: " + messages.get(
             status_code, "ผู้ให้บริการปฏิเสธคำขอ กรุณาตรวจโมเดลและการตั้งค่าใน Dashboard"
@@ -106,7 +112,12 @@ class OpenAICompatibleClient:
         )
 
     def _request(self, method, path, **kwargs):
-        response = self._http.request(method, path, **kwargs)
+        for attempt in range(3):
+            response = self._http.request(method, path, **kwargs)
+            if response.status_code not in (502, 503, 504) or attempt == 2:
+                break
+            response.close()
+            time.sleep(2 ** attempt)
         if not response.is_success:
             raise ProviderAPIError(response.status_code)
         return response.json()

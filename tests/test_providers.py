@@ -1,4 +1,5 @@
 import json
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -9,6 +10,10 @@ from osint_agent import agent, graph, providers
 @pytest.mark.parametrize("url,protocol,expected", [
     ("https://api.maxplus-ai.cc/v1", "openai", "https://api.maxplus-ai.cc/v1"),
     ("https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1/models", "openai",
+     "https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1"),
+    ("https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1/chat/completions", "openai",
+     "https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1"),
+    ("https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1/responses", "openai",
      "https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1"),
     ("https://api.maxplus-ai.cc/v1", "anthropic", "https://api.maxplus-ai.cc"),
 ])
@@ -90,3 +95,48 @@ def test_auth_failure_is_actionable_and_does_not_echo_provider_body(monkeypatch)
         assert "secret-fixture" not in str(error.value)
     finally:
         client.close()
+
+
+@pytest.mark.parametrize("status", [502, 503, 504])
+@pytest.mark.parametrize("recovers", [False, True])
+def test_temporary_provider_failure_retries_same_request_with_a_limit(monkeypatch, status, recovers):
+    requests = []
+    sleep = Mock()
+    monkeypatch.setattr("time.sleep", sleep)
+
+    def respond(request):
+        requests.append(request)
+        if recovers and len(requests) == 2:
+            return httpx.Response(200, json={"choices": [{
+                "message": {"content": "Fixture response"}, "finish_reason": "stop",
+            }]})
+        return httpx.Response(status, json={"error": "secret-fixture"})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(providers.httpx, "Client", lambda **kwargs: real_client(
+        **kwargs, transport=httpx.MockTransport(respond),
+    ))
+    client = providers.OpenAICompatibleClient(
+        "ccsk-fixture", "https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1",
+    )
+    try:
+        if recovers:
+            result = client.create(model="gpt-fixture", max_tokens=10, system="", messages=[])
+            assert result.content[0].text == "Fixture response"
+        else:
+            with pytest.raises(providers.ProviderAPIError) as error:
+                client.create(model="gpt-fixture", max_tokens=10, system="", messages=[])
+            assert error.value.status_code == status
+            assert "secret-fixture" not in str(error.value)
+        assert len(requests) == (2 if recovers else 3)
+        assert sleep.call_count == (1 if recovers else 2)
+        assert all(request.url.path == "/gpt-pro-ultimate-lite/v1/chat/completions" for request in requests)
+        assert all(request.content == requests[0].content for request in requests)
+    finally:
+        client.close()
+
+
+def test_503_message_describes_service_availability():
+    error = providers.ProviderAPIError(503)
+    assert "ยังไม่พร้อม" in str(error)
+    assert "ปฏิเสธคำขอ" not in str(error)

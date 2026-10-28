@@ -387,6 +387,7 @@ with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ 
     providers = {
         "ใช้ .env / Anthropic (ค่าเดิม)": ("", "", ""),
         "MaxPlus GPT": ("openai", "https://api.maxplus-ai.cc/v1", ""),
+        "MaxPlus GPT Pro Ultimate Lite": ("openai", "https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1", ""),
         "MaxPlus Claude": ("anthropic", "https://api.maxplus-ai.cc", "claude-sonnet-4-6"),
     }
     selection = st.selectbox("ผู้ให้บริการ AI", list(providers), key="api_provider")
@@ -417,13 +418,17 @@ with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ 
                 if not models:
                     raise RuntimeError("ไม่พบโมเดลสำหรับ key นี้ กรุณาตรวจ pool ใน Dashboard")
                 st.session_state[models_key] = models
-            st.success("เชื่อมต่อสำเร็จ เลือก Model ID แล้วเริ่มสืบสวนได้เลย")
+            st.success("โหลดรายการโมเดลสำเร็จ กรุณาเลือก Model ID ก่อนเริ่มสืบสวน")
         except Exception as exc:
             st.session_state.pop(models_key, None)
             st.error(f"เชื่อมต่อไม่สำเร็จ: {exc}")
     available_models = st.session_state.get(models_key, [])
     if available_models:
-        model = st.selectbox("Model ID", available_models, key=f"api_model_list_{models_key}")
+        model = st.selectbox(
+            "Model ID", available_models, index=None, placeholder="เลือกโมเดลที่ต้องการใช้งาน",
+            key=f"api_model_list_{models_key}",
+        )
+        st.caption("โหลดรายการสำเร็จยังไม่ได้ทดสอบว่าโมเดลสร้างข้อความหรือใช้เครื่องมือได้")
     else:
         model = st.text_input(
             "Model ID", value=default_model, key=f"api_model_{selection}",
@@ -522,6 +527,9 @@ if submitted:
     if not value:
         st.warning("กรุณากรอกค่าที่ต้องการตรวจสอบ")
         st.stop()
+    if available_models and not model:
+        st.warning("กรุณาเลือก Model ID ในหน้าตั้งค่า API ก่อนเริ่มสืบสวน")
+        st.stop()
 
     audit("search", ACTOR, target_type=identifier_type, target_value=value, context=context.strip())
     st.session_state.setdefault("history", []).append(
@@ -598,6 +606,7 @@ if result:
 
     timeline_container.markdown(_timeline_html(result["events"]), unsafe_allow_html=True)
     if result["error"]:
+        report_area.empty()
         badge.error(f"ตรวจสอบไม่สำเร็จ: {result['value']}")
         st.error(f"เกิดข้อผิดพลาด: {result['error']}")
     elif result["report"]:

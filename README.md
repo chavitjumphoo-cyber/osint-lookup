@@ -63,7 +63,15 @@ Settings and keys are stored only in the current Streamlit session.
 
 MaxPlus GPT uses `https://api.maxplus-ai.cc/v1` by default. A pool-specific URL
 such as `https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1` is also accepted,
-including a pasted `/v1/models` URL. The key must have access to that pool.
+including pasted `/v1/models`, `/v1/chat/completions`, or `/v1/responses` URLs.
+These URLs are normalized to the base path; the app uses Chat Completions.
+The **MaxPlus GPT Pro Ultimate Lite** preset selects that pool directly.
+The key must have access to that pool. Choose a Model ID explicitly after loading
+the list; the first entry is not automatically selected. Listing models verifies
+access to the list, not whether a model is currently available for generation.
+HTTP 503 means the pool/model service is unavailable; consult its Dashboard
+status or try again later. The transport retries HTTP 502/503/504 twice (after
+1 and 2 seconds) with the same endpoint and model. Other HTTP failures are not retried.
 For configuration through `.env` instead of the UI:
 
 ```env

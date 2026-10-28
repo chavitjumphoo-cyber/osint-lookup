@@ -93,6 +93,7 @@ def test_lookup_failure_does_not_generate_graph_and_can_retry(app_dependencies):
     app = AppTest.from_file(str(APP), default_timeout=15).run()
     investigate(app)
     assert any("fixture lookup unavailable" in item.value for item in app.error)
+    assert not any("AI กำลังเลือกเครื่องมือ" in item.value for item in app.info)
     graph_builder.assert_not_called()
     lookup.side_effect = None
     lookup.return_value = "## Recovered report"
@@ -112,6 +113,7 @@ def test_maxplus_settings_reach_both_investigation_and_graph(app_dependencies, m
     app.button(key="load_provider_models").click().run()
     assert models.call_args.args[0]["base_url"] == "https://api.maxplus-ai.cc/v1"
     assert models.call_args.args[0]["provider"] == "openai"
+    next(item for item in app.selectbox if item.label == "Model ID").select("gpt-fixture").run()
     if save_settings:
         next(button for button in app.button if "บันทึก API Keys" in button.label).click().run()
     investigate(app)
@@ -125,6 +127,35 @@ def test_maxplus_settings_reach_both_investigation_and_graph(app_dependencies, m
         base_url_override="https://api.maxplus-ai.cc/v1",
     )
     assert graph_builder.call_args.kwargs["model"] == "gpt-fixture"
+
+
+def test_model_list_does_not_automatically_select_first_model(app_dependencies, monkeypatch):
+    lookup, _, _, _ = app_dependencies
+    monkeypatch.setattr(agent, "list_provider_models", Mock(return_value=["codex-auto-review", "gpt-fixture"]))
+    app = AppTest.from_file(str(APP), default_timeout=15).run()
+    app.selectbox(key="api_provider").select("MaxPlus GPT").run()
+    app.text_input(key="anthropic_api_key").set_value("ccsk-fixture")
+    app.button(key="load_provider_models").click().run()
+    model_picker = next(item for item in app.selectbox if item.label == "Model ID")
+    assert model_picker.value is None
+    investigate(app)
+    lookup.assert_not_called()
+    assert any("Model ID" in item.value for item in app.warning)
+
+
+def test_maxplus_lite_preset_uses_dashboard_pool(app_dependencies):
+    lookup, _, _, _ = app_dependencies
+    app = AppTest.from_file(str(APP), default_timeout=15).run()
+    app.selectbox(key="api_provider").select("MaxPlus GPT Pro Ultimate Lite").run()
+    assert app.text_input(key="api_base_url_MaxPlus GPT Pro Ultimate Lite").value == (
+        "https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1"
+    )
+    app.text_input(key="anthropic_api_key").set_value("ccsk-fixture")
+    app.text_input(key="api_model_MaxPlus GPT Pro Ultimate Lite").set_value("gpt-fixture")
+    investigate(app)
+    assert lookup.call_args.kwargs["api_keys"]["base_url"] == (
+        "https://api.maxplus-ai.cc/gpt-pro-ultimate-lite/v1"
+    )
 
 
 def test_current_settings_replace_previously_saved_settings(app_dependencies):
