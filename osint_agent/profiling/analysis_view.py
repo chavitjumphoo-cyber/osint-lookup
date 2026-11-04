@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import cognitive, profile_resolver, relationships
+from . import cognitive, narrative, profile_resolver, relationships
 from . import timeline as timeline_mod
 from .identity_score import score_pair
 
@@ -99,8 +99,26 @@ def build(store, run_id: str) -> dict:
     cog = cognitive.evaluate(profiles, artifacts, entities)
     confirmed = [p for p in profiles if p["confidence"] in {"Confirmed", "Probable"}]
 
+    data_for_narrative = {
+        "identity": {
+            "names": sorted({n for p in profiles for n in p["display_names"]}),
+            "family_names": sorted({f for p in profiles for f in p.get("family_names", [])}),
+            "emails": sorted({e for p in profiles for e in p["emails"]}),
+            "phones": sorted({ph for p in profiles for ph in p["phones"]}),
+            "locations": sorted({loc for p in profiles for loc in p["locations"]}),
+            "organizations": sorted({o for p in profiles for o in p["organizations"]}),
+        },
+        "profiles_detail": profiles,
+        "interests": sorted({i for p in profiles for i in p["interests"]}),
+        "cognitive": cog,
+        "explicit_relations": [r for p in profiles for r in p.get("relations", [])],
+        "contradictions": [],
+        "limitations": [],
+    }
+
     return {
         "run": run,
+        "narrative": narrative.build(data_for_narrative, artifacts),
         "identifiers": identifiers,
         "profiles": profiles,
         "ownership": pairs,

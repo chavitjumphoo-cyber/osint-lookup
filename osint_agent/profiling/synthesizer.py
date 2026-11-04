@@ -9,7 +9,7 @@ import json
 import os
 import re
 
-from . import cognitive
+from . import cognitive, narrative
 
 
 def contradictions(profiles: list[dict], entities: list[dict]) -> list[dict]:
@@ -98,8 +98,9 @@ def synthesize(
         summary.append("นามสกุลที่พบ (ใช้เป็น pivot ไม่ใช่หลักฐานครอบครัว): " + ", ".join(family_names[:5]))
     summary.append("แยกได้เป็น: ยืนยันได้ / เป็นไปได้ / ขัดแย้ง / ยังตอบไม่ได้ (ดูหัวข้อ 11 และ 15)")
 
-    return {
+    data = {
         "executive_summary": summary,
+        "profiles_detail": profiles,
         "identity": {
             "names": names,
             "locations": locations,
@@ -138,10 +139,14 @@ def synthesize(
         ],
         "artifact_ids": [a["artifact_id"] for a in artifacts],
     }
+    data["narrative"] = narrative.build(data, artifacts)
+    return data
 
 
 def render_markdown(data: dict, run: dict) -> str:
     out = ["# Subject Intelligence Dossier", ""]
+    if data.get("narrative"):
+        out += [narrative.render(data["narrative"]), ""]
     out += [f"- **เป้าหมาย**: `{run['target']}` ({run['target_type']})", f"- **Run**: `{run['id']}`", ""]
 
     def section(title: str, items: list[str]) -> None:

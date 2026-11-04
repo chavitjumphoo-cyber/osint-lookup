@@ -602,22 +602,24 @@ if submitted:
                 st.success(f"สร้าง run ต่อเนื่อง: {child}")
 
         with tab_who:
-            who = analysis["who"]
-            st.markdown(f"**ความเป็นไปได้ว่าเป็นบุคคลเดียวกัน: {who['confidence']}**")
-            for label, values in (
-                ("ชื่อที่ปรากฏ", who["likely_names"]),
-                ("แพลตฟอร์ม", who["platforms"]),
-                ("องค์กร", who["organizations"]),
-                ("สถานที่สาธารณะ", who["locations"]),
+            narr = analysis.get("narrative") or {}
+            st.markdown(narr.get("identity_answer", {}).get("narrative", "ยังไม่สามารถระบุได้"))
+            for key, title in (
+                ("digital_identity", "อัตลักษณ์ดิจิทัล"),
+                ("work_education", "อาชีพ/การศึกษา/องค์กร"),
+                ("geo_temporal", "พื้นที่และเวลา"),
+                ("family", "ครอบครัว/บุคคลแวดล้อม"),
+                ("lifestyle", "ความสนใจ"),
             ):
-                st.markdown(f"- **{label}**: {', '.join(values) if values else 'ไม่พบ'}")
-            if analysis["ownership"]:
-                st.markdown("**ownership scores**")
-                for pair in analysis["ownership"][:10]:
-                    st.markdown(
-                        f"- {pair['left']} ↔ {pair['right']} = {pair['verdict']} ({pair['score']})"
-                    )
-            st.caption("username ซ้ำอย่างเดียวไม่ยืนยันว่าเป็นคนเดียวกัน")
+                st.markdown(f"**{title}**")
+                st.markdown(narr.get(key, {}).get("narrative", "ยังไม่พบข้อมูล"))
+            st.markdown("**6D**")
+            for key, label in (("identity","Identity"),("geo_temporal","Geo-temporal"),
+                               ("psychological","Psychological/OCEAN"),("technical","Technical"),
+                               ("ideological","Ideological"),("opsec","OpSec")):
+                item = (narr.get("six_d") or {}).get(key, {})
+                st.markdown(f"- **{label}** ({item.get('confidence','Unverified')}): {item.get('narrative','ประเมินไม่ได้')}")
+            st.caption("ย่อหน้าทั้งหมดอ้าง evidence id ที่ตรวจสอบได้; ดูรายละเอียดในแท็บหลักฐาน")
 
         with tab_ids:
             if analysis["names"]:
