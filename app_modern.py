@@ -10,6 +10,7 @@ import streamlit as st
 from osint_agent.access import audit
 from osint_agent.agent import _build_client, read_config
 from osint_agent.graph import build_graph_html, build_relationship_graph
+from osint_agent.profiling import analysis_view
 from osint_agent.report_export import build_report_html
 from osint_agent.services.orchestrator import Orchestrator
 from osint_agent.services.store import RunStore
@@ -574,15 +575,97 @@ if submitted:
         report = payload.get("report") or "ไม่สามารถสร้างรายงานได้"
         findings = payload.get("findings") or []
         candidates = payload.get("candidates") or []
+        analysis = analysis_view.build(store, run_id)
 
         report_area.markdown(
             f'<div class="report">{report}</div>', unsafe_allow_html=True
         )
 
         st.markdown("---")
-        tab_report, tab_actions, tab_evidence, tab_candidates, tab_graph, tab_export = st.tabs(
-            ["📄 รายงาน", "🤖 Agent actions", "🧾 หลักฐาน", "👥 Candidates", "🕸️ ผัง", "💾 ส่งออก"]
-        )
+        (
+            tab_who, tab_ids, tab_profiles, tab_6d, tab_rel, tab_time,
+            tab_report, tab_actions, tab_evidence, tab_candidates, tab_graph, tab_export,
+        ) = st.tabs([
+            "🧭 บุคคลนี้คือใคร", "🔎 ตัวระบุที่พบ", "👤 โปรไฟล์", "🧠 6D",
+            "🕸️ ความสัมพันธ์", "🕒 Timeline", "📄 รายงาน", "🤖 Agent actions",
+            "🧾 หลักฐาน", "👥 Candidates", "🕸️ ผัง", "💾 ส่งออก",
+        ])
+
+        def pivot_button(identifier, kind, key):
+            if st.button("วิเคราะห์ต่อ", key=key):
+                child = orchestrator.start(identifier, "deep", parent_run_id=run_id)
+                threading.Thread(target=orchestrator.run, args=(child,), daemon=True).start()
+                st.success(f"สร้าง run ต่อเนื่อง: {child}")
+
+        with tab_who:
+            who = analysis["who"]
+            st.markdown(f"**ความเป็นไปได้ว่าเป็นบุคคลเดียวกัน: {who['confidence']}**")
+            for label, values in (
+                ("ชื่อที่ปรากฏ", who["likely_names"]),
+                ("แพลตฟอร์ม", who["platforms"]),
+                ("องค์กร", who["organizations"]),
+                ("สถานที่สาธารณะ", who["locations"]),
+            ):
+                st.markdown(f"- **{label}**: {', '.join(values) if values else 'ไม่พบ'}")
+            if analysis["ownership"]:
+                st.markdown("**ownership scores**")
+                for pair in analysis["ownership"][:10]:
+                    st.markdown(
+                        f"- {pair['left']} ↔ {pair['right']} = {pair['verdict']} ({pair['score']})"
+                    )
+            st.caption("username ซ้ำอย่างเดียวไม่ยืนยันว่าเป็นคนเดียวกัน")
+
+        with tab_ids:
+            if not analysis["identifiers"]:
+                st.info("ยังไม่พบตัวระบุ")
+            for index, item in enumerate(analysis["identifiers"][:60]):
+                st.markdown(
+                    f"**{item['type']}** `{item['value']}` · พบ {item['occurrences']} แหล่ง · {item['confidence']}"
+                )
+                if item["source_urls"]:
+                    st.markdown(" · ".join(f"[source]({url})" for url in item["source_urls"][:3]))
+                if item["next_pivots"]:
+                    st.caption("แนะนำ: " + ", ".join(item["next_pivots"]))
+                pivot_button(item["value"], item["type"], f"pivot-{index}")
+                st.divider()
+
+        with tab_profiles:
+            if not analysis["profiles"]:
+                st.info("ยังไม่พบโปรไฟล์ที่เปิดอ่าน")
+            for profile in analysis["profiles"]:
+                st.markdown(f"### {profile['platform']} · `{profile['username']}` · {profile['confidence']}")
+                st.markdown(f"[{profile['url']}]({profile['url']})")
+                for label, key in (("ชื่อ", "display_names"), ("bio", "bios"), ("สถานที่", "locations"),
+                                   ("องค์กร", "organizations"), ("อีเมล", "emails"), ("เว็บ", "links")):
+                    values = profile.get(key) or []
+                    if values:
+                        st.markdown(f"- **{label}**: {', '.join(str(v) for v in values[:4])}")
+                st.caption("evidence: " + ", ".join(profile["evidence"]))
+                st.divider()
+
+        with tab_6d:
+            for key, label in (("identity","Identity"),("geo_temporal","Geo-temporal"),
+                               ("psychological","Psychological/OCEAN"),("technical","Technical"),
+                               ("ideological","Ideological"),("opsec","OpSec")):
+                item = analysis["cognitive"].get(key, {})
+                st.markdown(f"### {label} — {item.get('confidence')}")
+                st.markdown(item.get("assessment", "ประเมินไม่ได้"))
+                if item.get("rationale"):
+                    st.caption(item["rationale"])
+                if item.get("metrics"):
+                    st.code(str(item["metrics"]))
+
+        with tab_rel:
+            if not analysis["relationships"]:
+                st.info("ยังไม่พบความสัมพันธ์ที่มีหลักฐาน")
+            for rel in analysis["relationships"]:
+                st.markdown(f"- {rel['name']} ↔ {rel['handle']} (พบร่วม {rel['strength']})")
+
+        with tab_time:
+            if not analysis["timeline"]:
+                st.info("ยังไม่พบวันที่")
+            for event in analysis["timeline"]:
+                st.markdown(f"- {event['date']} · {event['title']} · {event['platform']}")
 
         with tab_report:
             st.markdown(report, unsafe_allow_html=True)

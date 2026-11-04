@@ -33,7 +33,7 @@ def extract_entities(artifacts: list[dict]) -> list[dict]:
         for kind in ("names", "emails", "phones", "handles", "urls", "locations", "organizations", "interests", "dates"):
             key = "name" if kind == "names" else kind.rstrip("s")
             for value in found.get(kind, []):
-                signature = (key, value.lower())
+                signature = (key, value.lower(), artifact["artifact_id"])
                 if signature in seen:
                     continue
                 seen.add(signature)

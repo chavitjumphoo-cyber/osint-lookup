@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..services.orchestrator import Orchestrator, RunNotFound
 from ..services.store import RunStore
-from .schemas import CreatedResponse, InvestigateRequest, ReviewRequest, RunResponse
+from .schemas import CreatedResponse, InvestigateRequest, PivotRequest, ReviewRequest, RunResponse
 
 TERMINAL = {"done", "failed", "cancelled"}
 POLL_SECONDS = 0.4
@@ -84,6 +84,25 @@ def create_app(store: RunStore | None = None) -> FastAPI:
         store.set_status(run_id, "queued")
         _run_in_background(run_id)
         return CreatedResponse(run_id=run_id)
+
+    @app.get("/runs/{run_id}/analysis")
+    def analysis(run_id: str) -> dict:
+        from ..profiling import analysis_view
+
+        if not store.get_run(run_id):
+            raise RunNotFound(run_id)
+        return analysis_view.build(store, run_id)
+
+    @app.post("/runs/{run_id}/pivot", response_model=CreatedResponse, status_code=202)
+    def pivot(run_id: str, payload: PivotRequest) -> CreatedResponse:
+        parent = store.get_run(run_id)
+        if not parent:
+            raise RunNotFound(run_id)
+        child = orchestrator.start(
+            payload.identifier.strip(), payload.profile, payload.trusted, parent_run_id=run_id
+        )
+        _run_in_background(child)
+        return CreatedResponse(run_id=child)
 
     @app.get("/runs/{run_id}/report")
     def report(run_id: str) -> dict:

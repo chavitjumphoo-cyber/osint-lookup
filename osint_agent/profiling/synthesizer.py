@@ -77,6 +77,14 @@ def synthesize(
                        "confidence": p["confidence"], "evidence": p["evidence"]} for p in profiles]
 
     summary = []
+    likely = [p for p in profiles if p["confidence"] in {"Confirmed", "Probable"}]
+    if likely:
+        summary.append(
+            "ตัวตนที่มีความเป็นไปได้สูงสุด: "
+            + "; ".join(
+                f"{p['platform']}:{p['username']} ({p['confidence']})" for p in likely[:5]
+            )
+        )
     if profiles:
         summary.append(f"พบโปรไฟล์ {len(profiles)} แห่งจาก {len({p['platform'] for p in profiles})} แพลตฟอร์ม")
     if names:
@@ -85,6 +93,7 @@ def synthesize(
         summary.append(f"พื้นที่/สถานที่ซึ่งพบ: {', '.join(locations[:5])}")
     if not summary:
         summary.append("ยังไม่พบข้อมูลโปรไฟล์ที่ยืนยันได้จากแหล่งสาธารณะ")
+    summary.append("แยกได้เป็น: ยืนยันได้ / เป็นไปได้ / ขัดแย้ง / ยังตอบไม่ได้ (ดูหัวข้อ 11 และ 15)")
 
     return {
         "executive_summary": summary,

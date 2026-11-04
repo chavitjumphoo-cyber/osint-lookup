@@ -45,7 +45,8 @@ class RunStore:
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    error TEXT
+                    error TEXT,
+                    parent_run_id TEXT
                 );
                 CREATE TABLE IF NOT EXISTS events (
                     run_id TEXT NOT NULL,
@@ -123,19 +124,25 @@ class RunStore:
             "findings",
             {"status": "TEXT NOT NULL DEFAULT 'ok'", "output_hash": "TEXT NOT NULL DEFAULT ''"},
         )
+        self._ensure_columns(connection, "runs", {"parent_run_id": "TEXT"})
 
     # -- runs -------------------------------------------------------------
 
     def create_run(
-        self, target: str, target_type: str, profile: str, trusted: list[str] | None = None
+        self,
+        target: str,
+        target_type: str,
+        profile: str,
+        trusted: list[str] | None = None,
+        parent_run_id: str | None = None,
     ) -> str:
         run_id = uuid.uuid4().hex[:12]
         now = _now()
         with self._lock, self._connect() as connection:
             connection.execute(
-                "INSERT INTO runs (id, target, target_type, profile, status, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, 'queued', ?, ?)",
-                (run_id, target, target_type, profile, now, now),
+                "INSERT INTO runs (id, target, target_type, profile, status, created_at, updated_at, parent_run_id) "
+                "VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)",
+                (run_id, target, target_type, profile, now, now, parent_run_id),
             )
             connection.execute(
                 "INSERT OR REPLACE INTO events (run_id, seq, kind, text, created_at) VALUES (?, 0, 'meta', ?, ?)",

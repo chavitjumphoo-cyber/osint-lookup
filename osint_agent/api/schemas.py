@@ -20,6 +20,13 @@ class ReviewRequest(BaseModel):
     action: Literal["confirm", "reject", "reverse"]
 
 
+class PivotRequest(BaseModel):
+    identifier: str = Field(min_length=1, max_length=512)
+    identifier_type: str = "text"
+    profile: Profile = "standard"
+    trusted: list[str] = Field(default_factory=list)
+
+
 class RunResponse(BaseModel):
     id: str
     target: str

@@ -45,11 +45,19 @@ class Orchestrator:
 
     # -- lifecycle --------------------------------------------------------
 
-    def start(self, target: str, profile: str = "standard", trusted: list[str] | None = None) -> str:
+    def start(
+        self,
+        target: str,
+        profile: str = "standard",
+        trusted: list[str] | None = None,
+        parent_run_id: str | None = None,
+    ) -> str:
         if profile not in PROFILES:
             raise ValueError(f"profile ต้องเป็นหนึ่งใน {sorted(PROFILES)}")
         context = InvestigationContext.from_target(target)
-        run_id = self.store.create_run(target, context.target_type, profile, trusted or [])
+        run_id = self.store.create_run(
+            target, context.target_type, profile, trusted or [], parent_run_id
+        )
         self._emit(run_id, "queued", f"รับงาน: {context.target_type} = {target}")
         return run_id
 

@@ -102,3 +102,20 @@ def test_research_report_endpoint(store, client):
     docx = client.get(f"/runs/{run_id}/research-report?format=docx")
     assert docx.status_code == 200
     assert docx.content[:2] == b"PK"
+
+
+def test_analysis_and_pivot_endpoints(store, client):
+    run_id = store.create_run("jdoe", "username", "quick")
+    store.add_artifact(
+        run_id,
+        {"artifact_id": "a1", "source_url": "https://github.com/jdoe", "source_type": "profile",
+         "platform": "github", "title": "John", "author": "jdoe", "content": "John a@b.com"},
+    )
+    response = client.get(f"/runs/{run_id}/analysis")
+    assert response.status_code == 200
+    assert any(item["type"] == "email" for item in response.json()["identifiers"])
+
+    pivot = client.post(f"/runs/{run_id}/pivot", json={"identifier": "a@b.com", "identifier_type": "email", "profile": "quick"})
+    assert pivot.status_code == 202
+    child = store.get_run(pivot.json()["run_id"])
+    assert child["parent_run_id"] == run_id
