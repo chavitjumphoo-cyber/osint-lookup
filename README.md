@@ -47,8 +47,8 @@ python -m streamlit run app_modern.py
 ```env
 # MaxPlus (แนะนำ)
 MAXPLUS_API_KEY=...
-MAXPLUS_BASE_URL=https://<endpoint>
-MAXPLUS_MODEL=<model>
+MAXPLUS_BASE_URL=https://api.maxplus-ai.cc/claude-cursor-full/v1/models
+MAXPLUS_MODEL=claude-sonnet-5-5
 
 # หรือ Anthropic
 # ANTHROPIC_API_KEY=sk-ant-...

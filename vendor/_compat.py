@@ -12,7 +12,8 @@ from typing import Any
 
 from .osint_d2.core.config import AppSettings
 
-DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULT_MAXPLUS_BASE_URL = "https://api.maxplus-ai.cc/claude-cursor-full/v1/models"
 
 
 def _project_config() -> dict:
@@ -29,7 +30,11 @@ def settings_from_project() -> AppSettings:
         or config.get("ANTHROPIC_BASE_URL")
         or os.environ.get("MAXPLUS_BASE_URL")
         or os.environ.get("ANTHROPIC_BASE_URL")
+        or (DEFAULT_MAXPLUS_BASE_URL if config.get("MAXPLUS_API_KEY") else "")
     )
+    for suffix in ("/v1/messages", "/v1/models"):
+        if base_url.endswith(suffix):
+            base_url = base_url[: -len(suffix)]
     api_key = (
         config.get("MAXPLUS_API_KEY")
         or config.get("ANTHROPIC_API_KEY")

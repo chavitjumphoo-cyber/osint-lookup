@@ -56,3 +56,16 @@ def test_compat_settings_use_maxplus(monkeypatch):
     settings = _compat.settings_from_project()
     assert settings.ai_model == "mp-model"
     assert settings.ai_base_url == "https://mp.test"
+
+
+def test_defaults_when_only_key_set(monkeypatch):
+    monkeypatch.setattr(agent, "read_config", lambda: {"MAXPLUS_API_KEY": "mp"})
+    client = agent._build_client()
+    assert str(client.base_url).rstrip("/") == "https://api.maxplus-ai.cc/claude-cursor-full"
+    assert agent.model_name() == "claude-sonnet-5-5"
+
+
+def test_normalize_strips_models_suffix():
+    assert agent.normalize_base_url("https://x.test/v1/models") == "https://x.test"
+    assert agent.normalize_base_url("https://x.test/v1/messages") == "https://x.test"
+    assert agent.normalize_base_url("https://x.test/") == "https://x.test"

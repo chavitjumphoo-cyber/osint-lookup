@@ -13,8 +13,18 @@ from anthropic import Anthropic
 from .system_prompt import SYSTEM_PROMPT
 from .tools import build_tool_list, execute_tool
 
-DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_MODEL = "claude-sonnet-5-5"
 MODEL = DEFAULT_MODEL
+DEFAULT_MAXPLUS_BASE_URL = "https://api.maxplus-ai.cc/claude-cursor-full/v1/models"
+
+
+def normalize_base_url(url: str) -> str:
+    """ตัด suffix /v1/messages หรือ /v1/models ที่ SDK จะเติมซ้ำ"""
+    url = (url or "").strip().rstrip("/")
+    for suffix in ("/v1/messages", "/v1/models"):
+        if url.endswith(suffix):
+            return url[: -len(suffix)]
+    return url
 
 
 def model_name() -> str:
@@ -68,12 +78,15 @@ def _build_client(api_key_override: str = None) -> Anthropic:
     )
 
     # ถ้าไม่มี API key และไม่มี base_url ที่อนุญาต ให้ raise error
+    maxplus_key = config.get("MAXPLUS_API_KEY") or os.environ.get("MAXPLUS_API_KEY")
     base_url = (
         config.get("MAXPLUS_BASE_URL")
         or config.get("ANTHROPIC_BASE_URL")
         or os.environ.get("MAXPLUS_BASE_URL")
         or os.environ.get("ANTHROPIC_BASE_URL")
+        or (DEFAULT_MAXPLUS_BASE_URL if maxplus_key else "")
     )
+    base_url = normalize_base_url(base_url)
 
     # If MaxPlus base_url is set, it's optional to have API key (MaxPlus might use auth headers)
     # But for standard Anthropic, we need the key

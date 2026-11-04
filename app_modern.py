@@ -8,7 +8,7 @@ from datetime import datetime
 import streamlit as st
 
 from osint_agent.access import audit
-from osint_agent.agent import _build_client, read_config
+from osint_agent.agent import DEFAULT_MAXPLUS_BASE_URL, _build_client, read_config
 from osint_agent.graph import build_graph_html, build_relationship_graph
 from osint_agent.profiling import analysis_view
 from osint_agent.report_export import build_report_html
@@ -391,10 +391,14 @@ with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ 
     st.markdown("**MaxPlus (แนะนำ)**")
     maxplus_key = st.text_input("MaxPlus API Key", type="password", key="maxplus_api_key")
     maxplus_base = st.text_input(
-        "MaxPlus Base URL", placeholder="https://api.maxplus.example", key="maxplus_base_url"
+        "MaxPlus Base URL",
+        value=CONFIG.get("MAXPLUS_BASE_URL") or DEFAULT_MAXPLUS_BASE_URL,
+        key="maxplus_base_url",
     )
     maxplus_model = st.text_input(
-        "MaxPlus Model", placeholder="ชื่อโมเดลที่บัญชีคุณใช้ได้", key="maxplus_model"
+        "MaxPlus Model",
+        value=CONFIG.get("MAXPLUS_MODEL") or "claude-sonnet-5-5",
+        key="maxplus_model",
     )
 
     st.markdown("**Claude/Anthropic (ทางเลือก)**")
