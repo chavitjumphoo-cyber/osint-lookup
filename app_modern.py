@@ -1,6 +1,5 @@
 """OSINT Lookup — Modern UI matching landing page theme"""
 
-import hmac
 import html
 import threading
 import time
@@ -432,7 +431,7 @@ with st.form("investigate"):
         )
 
     col3, col4 = st.columns(2)
-    profile = col3.selectbox("ความลึก", ["quick", "standard", "deep"], index=1)
+    profile = col3.selectbox("ความลึก", ["quick", "standard", "deep"], index=1, help="standard/deep ใช้ LLM agent เมื่อมี API key")
     trusted_raw = col4.text_input(
         "Verified accounts (คั่นด้วย ,)", placeholder="github:johndoe, email:a@b.com"
     )
@@ -569,12 +568,20 @@ if submitted:
         )
 
         st.markdown("---")
-        tab_report, tab_evidence, tab_candidates, tab_graph, tab_export = st.tabs(
-            ["📄 รายงาน", "🧾 หลักฐาน", "👥 Candidates", "🕸️ ผัง", "💾 ส่งออก"]
+        tab_report, tab_actions, tab_evidence, tab_candidates, tab_graph, tab_export = st.tabs(
+            ["📄 รายงาน", "🤖 Agent actions", "🧾 หลักฐาน", "👥 Candidates", "🕸️ ผัง", "💾 ส่งออก"]
         )
 
         with tab_report:
             st.markdown(report, unsafe_allow_html=True)
+
+        with tab_actions:
+            action_findings = [f for f in findings if f["tool"].startswith("agent:")]
+            if not action_findings:
+                st.info("run นี้ใช้ deterministic plan (ไม่มี API key หรือ profile quick)")
+            for finding in action_findings:
+                st.markdown(f"**{finding['tool']}**")
+                st.code(finding["output"][:1500])
 
         with tab_evidence:
             for finding in findings:

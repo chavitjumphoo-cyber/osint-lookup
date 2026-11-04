@@ -47,6 +47,12 @@ status ∈ ok | empty | blocked | unknown | failed
 
 `blocked` = ตรวจไม่ได้, `empty` = ตรวจแล้วไม่พบ — รายงานต้องแยกสองอย่างนี้
 
+## AgentEngine v2
+
+standard/deep + มี API key → `services/agent_engine.py`:
+LLM เลือก action → `agent_tools` → evidence core → artifact → profile extractor → leads
+ทุก action บันทึก reason/result; ไม่มี key → deterministic fallback
+
 ## Profiling corpus
 
 `profiling/` เก็บ artifact ทุกชิ้นพร้อม source_url, source_type, output_hash และ confidence

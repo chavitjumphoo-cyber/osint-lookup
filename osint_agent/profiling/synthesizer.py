@@ -164,16 +164,18 @@ def render_markdown(data: dict, run: dict) -> str:
         f"- {item['name']} ↔ {item['handle']} (พบร่วม {item['strength']} ครั้ง)" for item in data["associates"]
     ])
     section("5. Lifestyle & Interests", [f"- {item}" for item in data["interests"]])
+    section("6. Geo-temporal Signals", [f"- {item['date']}: {item['title']}" for item in data["geo_temporal"]["events"]])
+    section("7. Technical Profile", [f"- {item}" for item in data["technical_profile"]])
 
-    out.append("## 5B. 6D Cognitive Profiling")
+    out.append("## 8. 6D Cognitive Profiling")
     out.append("")
     labels = {
-        "identity": "Identity",
-        "geo_temporal": "Geo-temporal",
-        "psychological": "Psychological (OCEAN)",
-        "technical": "Technical",
-        "ideological": "Ideological",
-        "opsec": "OpSec / Attack Surface",
+        "identity": "8.1 Identity",
+        "geo_temporal": "8.2 Geo-temporal",
+        "psychological": "8.3 Psychological (OCEAN)",
+        "technical": "8.4 Technical",
+        "ideological": "8.5 Ideological",
+        "opsec": "8.6 OpSec / Attack Surface",
     }
     for key, label in labels.items():
         item = data["cognitive"].get(key) or {}
@@ -188,27 +190,31 @@ def render_markdown(data: dict, run: dict) -> str:
         out.append("")
     out.append("*OCEAN เป็นสมมติฐานจากสถิติข้อความ ไม่ใช่แบบประเมินจิตวิทยา*")
     out.append("")
-    section("6. Geo-temporal Signals", [f"- {item['date']}: {item['title']}" for item in data["geo_temporal"]["events"]])
-    section("7. Technical Profile", [f"- {item}" for item in data["technical_profile"]])
-    section("8. Fraud / Scam History", [
+
+    section("9. Fraud / Scam History", [
         f"- {item.get('title') or item.get('source_url')} ({item.get('platform')})" for item in data["fraud_history"]
     ])
-    section("9. OpSec Exposure", [
+    section("10. OpSec Exposure", [
         f"- {key}: {', '.join(value) if isinstance(value, list) else value}"
         for key, value in data["opsec_exposure"].items()
     ])
-    section("10. Contradictions", [
+    section("11. Contradictions", [
         f"- {item['kind']} `{item['value']}`: {', '.join(item['detail'])}" for item in data["contradictions"]
     ])
-    section("11. Critical Pivot Points", [
+    section("12. Critical Pivot Points", [
         f"- {item['type']} `{item['value']}` — {item['reason']}" for item in data["critical_pivots"]
     ])
-    section("12. Timeline", [f"- {item['date']} · {item['title']}" for item in data["timeline"]])
-    section("13. Evidence Sources", [
+    section("13. Timeline", [f"- {item['date']} · {item['title']}" for item in data["timeline"]])
+    section("14. Evidence Sources", [
         f"- `{item['artifact_id']}` · {item.get('source_tool')} · {item.get('status')} · {item.get('source_url')}"
         for item in data.get("_artifacts", [])
     ])
-    section("14. Confidence Assessment & ข้อจำกัด (Limitations)", [
+    if data.get("actions"):
+        section("14B. Agent Actions", [
+            f"- step {item.get('step')}: {item.get('action')} {item.get('target')} — {item.get('reason') or '-'}"
+            for item in data["actions"][:40]
+        ])
+    section("15. Confidence Assessment & ข้อจำกัด (Limitations)", [
         f"- {line}" for line in data["limitations"]
     ] or ["- ต้องตรวจด้วยมนุษย์ก่อนใช้ตัดสินใจ"])
     out.append("---")

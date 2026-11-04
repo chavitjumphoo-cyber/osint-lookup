@@ -95,6 +95,11 @@ class Orchestrator:
         self.store.set_status(run_id, "running")
         self._emit(run_id, "start", f"เริ่มสืบสวนแบบ lead-driven ({run['profile']})")
 
+        from . import agent_engine
+
+        if run["profile"] in {"standard", "deep"} and agent_engine.available():
+            return self._run_agent(run, context, budget, corpus)
+
         try:
             trusted = self.store.trusted(run_id)
             anchor_names: list[str] = []
@@ -262,6 +267,42 @@ class Orchestrator:
             self.store.set_status(run_id, "failed", f"{type(exc).__name__}: {exc}")
             return self._finish(run_id, "failed", str(exc))
 
+    def _run_agent(self, run: dict, context, budget, corpus) -> RunResult:
+        run_id = run["id"]
+        from .agent_engine import AgentEngine, seed_queries, seed_state
+
+        try:
+            trusted = self.store.trusted(run_id)
+            if trusted and context.target_type == "username":
+                self._emit(run_id, "tool", "trusted_scan")
+                result = trust_anchor.apply_trust(context.original_target, trusted)
+                self._finding(run_id, "trusted_scan", result.summary())
+            state = seed_state(self.store, run)
+            for query in seed_queries(state):
+                if self._cancelled(run_id):
+                    return self._finish(run_id, "cancelled")
+                self._emit(run_id, "search", query)
+                try:
+                    for artifact in collectors.search(query, limit=8):
+                        state.add_artifact(artifact)
+                except Exception as exc:  # noqa: BLE001
+                    self._finding(run_id, "web_search", type(exc).__name__, "failed")
+            engine = AgentEngine(self.store, run_id, on_event=lambda e: self._emit(run_id, e["kind"], e["text"]))
+            engine.run(run, state, budget)
+            self.store.set_status(run_id, "done")
+            self._emit(run_id, "done", f"agent เสร็จสิ้น ({state.steps} ขั้น)")
+            return self._finish(run_id, "done")
+        except budget_mod.BudgetExceeded as exc:
+            self._emit(run_id, "budget", str(exc))
+            self._safe_report(run_id, run)
+            self.store.set_status(run_id, "done")
+            return self._finish(run_id, "done")
+        except Exception as exc:  # noqa: BLE001
+            self._emit(run_id, "error", f"{type(exc).__name__}: {exc}")
+            self._safe_report(run_id, run)
+            self.store.set_status(run_id, "failed", str(exc))
+            return self._finish(run_id, "failed", str(exc))
+
     # -- specialists ------------------------------------------------------
 
     def _build_leads(self, corpus, profiles, context):
@@ -281,11 +322,26 @@ class Orchestrator:
         return queue
 
     def _identity_candidates(self, run_id: str, profiles: list[dict]) -> None:
+        from ..profiling.identity_score import score_pair
+
         entities = [profile_resolver.profile_entities(profile) for profile in profiles]
         candidates = IdentityResolver.create_candidates(entities)
         for candidate in candidates:
             self.store.add_candidate(run_id, candidate.to_dict())
-        self._emit(run_id, "candidate", f"identity candidates: {len(candidates)}")
+        pairs = []
+        for index, left in enumerate(profiles):
+            for right in profiles[index + 1 :]:
+                if left["key"] == right["key"]:
+                    continue
+                scored = score_pair(left, right)
+                if scored["verdict"] != "Unverified":
+                    pairs.append(
+                        f"{left['platform']}:{left['username']} ↔ {right['platform']}:{right['username']} "
+                        f"= {scored['verdict']} ({scored['score']}) signals={','.join(scored['signals']) or '-'}"
+                    )
+        if pairs:
+            self._finding(run_id, "ownership_scores", "\n".join(pairs[:30]))
+        self._emit(run_id, "candidate", f"identity candidates: {len(candidates)}, scored pairs: {len(pairs)}")
 
     def _safe_report(self, run_id: str, run: dict) -> None:
         try:

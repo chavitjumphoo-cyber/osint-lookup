@@ -78,6 +78,9 @@ def resolve_profiles(artifacts: list[dict], entities: list[dict]) -> list[dict]:
                 "phones": [],
                 "handles": [],
                 "links": [],
+                "education": [],
+                "languages": [],
+                "explicit_links": [],
                 "dates": [],
                 "evidence": [],
                 "confidence": "Unverified",
@@ -88,9 +91,22 @@ def resolve_profiles(artifacts: list[dict], entities: list[dict]) -> list[dict]:
         if title and title.lower() not in NAME_STOP and 2 < len(title) < 80:
             if not any(title in existing or existing in title for existing in profile["display_names"]):
                 profile["display_names"].append(title)
-        avatar = (artifact.get("metadata") or {}).get("avatar")
+        metadata = artifact.get("metadata") or {}
+        avatar = metadata.get("avatar")
         if avatar and not profile.get("avatar"):
             profile["avatar"] = avatar
+            from hashlib import sha1
+
+            profile["avatar_hash"] = sha1(avatar.encode()).hexdigest()[:16]
+        for field in ("emails", "phones", "organizations", "education", "languages"):
+            for entry in (metadata.get("profile_fields") or {}).get(field, []):
+                value = entry.get("value") if isinstance(entry, dict) else entry
+                if value and value not in profile[field]:
+                    profile[field].append(value)
+        for entry in (metadata.get("profile_fields") or {}).get("websites", []):
+            value = entry.get("value") if isinstance(entry, dict) else entry
+            if value and value not in profile["links"]:
+                profile["links"].append(value)
         content = artifact.get("content", "")
         if content and len(content) > 15:
             if not any(content[:80] in existing for existing in profile["bios"]):

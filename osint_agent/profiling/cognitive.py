@@ -57,17 +57,21 @@ def evaluate(profiles: list[dict], artifacts: list[dict], entities: list[dict]) 
     locations = {e["value"] for e in by_type.get("location", [])}
     emails = {e["value"] for e in by_type.get("email", [])}
     phones = {e["value"] for e in by_type.get("phone", [])}
+    orgs = {value for p in profiles for value in p.get("organizations", [])}
+    education = {value for p in profiles for value in p.get("education", [])}
+    languages = {value for p in profiles for value in p.get("languages", [])}
+    websites = {value for p in profiles for value in p.get("links", [])}
     texts = _texts(artifacts)
 
     results: dict[str, dict] = {}
 
     if profiles:
         results["identity"] = _result(
-            f"พบโปรไฟล์ {len(profiles)} แห่งบน {len(platforms)} แพลตฟอร์ม; ชื่อที่แสดงต่างกัน {len(names)} แบบ",
+            f"พบโปรไฟล์ {len(profiles)} แห่งบน {len(platforms)} แพลตฟอร์ม; ชื่อต่างกัน {len(names)}; องค์กร {len(orgs)}; การศึกษา {len(education)}",
             "Probable" if len(platforms) >= 3 else "Unverified",
             "วัดจากจำนวนแพลตฟอร์มและชื่อที่สอดคล้องกัน; username ซ้ำเพียงอย่างเดียวไม่ยืนยัน",
             [eid for p in profiles for eid in p["evidence"]],
-            {"platforms": len(platforms), "profiles": len(profiles), "distinct_names": len(names)},
+            {"platforms": len(platforms), "profiles": len(profiles), "distinct_names": len(names), "orgs": len(orgs)},
         )
     else:
         results["identity"] = _result("ประเมินไม่ได้ — ยังไม่พบโปรไฟล์", "Unverified", "ไม่มีหลักฐานโปรไฟล์", [])
@@ -118,7 +122,9 @@ def evaluate(profiles: list[dict], artifacts: list[dict], entities: list[dict]) 
             f"ประเมินไม่ได้ — ข้อความยาวไม่พอ ({len(texts)}/3 ชิ้น)", "Unverified", "ต้องมีข้อความอย่างน้อย 3 ชิ้น", []
         )
 
-    tech_hits = Counter()
+    tech_hits = Counter(language for language in languages)
+    if orgs:
+        pass
     short_texts = [a.get("content", "") for a in artifacts if a.get("content")]
     for text in short_texts:
         low = text.lower()
@@ -162,13 +168,15 @@ def evaluate(profiles: list[dict], artifacts: list[dict], entities: list[dict]) 
         exposures.append(f"สถานที่ {len(locations)} แห่ง")
     if names:
         exposures.append(f"ชื่อจริง/ชื่อที่แสดง {len(names)} แบบ")
+    if websites:
+        exposures.append(f"เว็บไซต์ {len(websites)} แห่ง")
     if exposures:
         results["opsec"] = _result(
             "ข้อมูลที่เปิดเผย: " + ", ".join(exposures),
             "Probable",
             "รายงานเฉพาะสิ่งที่พบในที่สาธารณะ",
             [e["source_artifact"] for kind in ("email", "phone", "location") for e in by_type.get(kind, [])],
-            {"emails": len(emails), "phones": len(phones), "locations": len(locations)},
+            {"emails": len(emails), "phones": len(phones), "locations": len(locations), "websites": len(websites)},
         )
     else:
         results["opsec"] = _result("ประเมินไม่ได้ — ไม่พบข้อมูลที่เปิดเผย", "Unverified", "ไม่พบ identifier", [])
