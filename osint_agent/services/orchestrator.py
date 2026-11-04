@@ -20,9 +20,9 @@ from .store import RunStore
 
 PROFILES = {"quick", "standard", "deep"}
 LIMITS = {
-    "quick": {"queries": 2, "fetch": 2, "leads": 2, "scan": True},
-    "standard": {"queries": 5, "fetch": 4, "leads": 4, "scan": True},
-    "deep": {"queries": 8, "fetch": 7, "leads": 8, "scan": True},
+    "quick": {"queries": 2, "fetch": 2, "leads": 2, "scan": True, "probe": False},
+    "standard": {"queries": 5, "fetch": 4, "leads": 4, "scan": True, "probe": True},
+    "deep": {"queries": 12, "fetch": 16, "leads": 20, "scan": True, "probe": True},
 }
 
 
@@ -151,6 +151,13 @@ class Orchestrator:
                 self._finding(run_id, "scan_profiles", f"พบโปรไฟล์มีข้อมูล {added}")
                 self._emit(run_id, "result", f"โปรไฟล์ที่มีข้อมูล {added}")
 
+                if limits["probe"]:
+                    budget.step()
+                    self._emit(run_id, "tool", f"probe_platforms {username}")
+                    for artifact in collectors.probe_platforms(username):
+                        corpus.add(artifact)
+                    self._finding(run_id, "probe_platforms", "ตรวจแพลตฟอร์มเพิ่มเติมแล้ว")
+
             # 3) rank and fetch
             fetched_urls = {
                 a["source_url"] for a in corpus.artifacts() if a["source_type"] != "search_result"
@@ -158,7 +165,17 @@ class Orchestrator:
             search_results = [
                 a for a in corpus.search_results() if a["source_url"] not in fetched_urls
             ]
-            ranked = sorted({a["source_url"]: a for a in search_results}.values(), key=collectors.rank_result, reverse=True)
+            unread_profiles = [
+                a
+                for a in corpus.artifacts()
+                if a.get("source_type") == "profile"
+                and not a.get("content")
+                and a["source_url"] not in fetched_urls
+            ]
+            pool = {a["source_url"]: a for a in search_results}
+            for artifact in unread_profiles:
+                pool.setdefault(artifact["source_url"], artifact)
+            ranked = sorted(pool.values(), key=collectors.rank_result, reverse=True)
             for artifact in ranked[: limits["fetch"]]:
                 if self._cancelled(run_id):
                     return self._finish(run_id, "cancelled")

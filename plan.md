@@ -382,3 +382,15 @@ LICENSE.osint-d2
 - LLM planner มีต้นทุน/ช้า → จำกัด step และใช้เฉพาะ standard/deep
 - หน้าเว็บส่วนใหญ่บล็อก → ต้องรายงาน blocked ไม่ใช่ปลอมข้อมูล
 - การสกัดชื่อผิด → confidence + human review + ห้าม merge
+
+---
+
+## Phase 9 — 6D Cognitive Profiling + deep collection (เสร็จแล้ว)
+
+- [x] `profiling/cognitive.py` ประเมิน 6D ทุกมิติ พร้อม evidence/confidence/metrics และ "ประเมินไม่ได้" เมื่อไม่พอ
+- [x] Dossier section 5B แสดง 6D ครบทุกมิติ; OCEAN ติดป้าย Speculative
+- [x] deep mode: query 12, fetch 16, leads 20 + platform probe
+- [x] probe แพลตฟอร์ม found/unknown แล้วเปิดอ่านโปรไฟล์ด้วย Moli
+- [x] validator ตัด finding ที่อ้าง evidence id ไม่มีจริง
+- [x] รายงานวิจัยตาม DOCX + export `.docx` (CLI `export --research --docx`, API `/research-report`)
+- [x] ทดสอบจริง deep: 65 artifacts, 17 โปรไฟล์, 6D ครบ

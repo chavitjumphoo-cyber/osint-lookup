@@ -34,6 +34,7 @@ python -m streamlit run app_modern.py
 | `agent <target>` | รันด้วย profile standard |
 | `resume <run_id>` | ทำ run เดิมต่อจาก checkpoint |
 | `export <run_id> -o out.json` | ส่งออกหลักฐาน |
+| `export <run_id> --research --docx -o r.docx` | ออกรายงานวิจัยตาม template |
 | `review <run_id>` | ตรวจหลักฐาน/candidate |
 | `review <run_id> --candidate c1 --action confirm` | ตัดสิน candidate |
 
@@ -95,6 +96,12 @@ osint-lookup/
 - **Avatar Comparison**: Perceptual hash matching
 - **Stylometry Analysis**: Writing style correlation
 - **Social Graph**: Relationship visualization
+
+## 🧠 Profiling
+
+- lead-driven corpus → profile resolver → 6D Cognitive Profiling
+- ทุกข้อค้นพบอ้าง artifact id + URL + hash; OCEAN เป็นสมมติฐานจากสถิติข้อความ
+- Dossier 14 หัวข้อ + 6D ทุกมิติ และรายงานวิจัยแยกสำหรับส่งอาจารย์/หน่วยงาน
 
 ## 🧠 How It Works
 

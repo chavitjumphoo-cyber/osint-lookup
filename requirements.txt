@@ -18,3 +18,4 @@ typer
 pydantic
 pyyaml
 pydantic-settings
+python-docx

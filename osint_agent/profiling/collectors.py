@@ -192,6 +192,35 @@ def scan_profiles(username: str, timeout: float = 45.0) -> list[Artifact]:
     return artifacts
 
 
+def probe_platforms(username: str, include_unknown: bool = True) -> list[Artifact]:
+    """ตรวจ username ข้ามแพลตฟอร์ม แล้วคืน artifact สำหรับ found/unknown"""
+    from .. import platform_scanner
+
+    try:
+        results = platform_scanner.scan_sync(username)
+    except Exception:  # noqa: BLE001
+        return []
+    wanted = {"found", "unknown"} if include_unknown else {"found"}
+    artifacts = []
+    for item in results["results"]:
+        if item.status not in wanted:
+            continue
+        source_type, platform = classify_url(item.url)
+        artifacts.append(
+            _artifact(
+                item.url,
+                "profile" if source_type == "profile" else "page",
+                f"probe:{item.platform}",
+                "",
+                platform=platform or item.platform.lower(),
+                status=item.status,
+                result=item.status,
+                confidence="Unverified",
+            )
+        )
+    return artifacts
+
+
 def artifact_status_from_text(text: str) -> str:
     return classify_status(text)
 

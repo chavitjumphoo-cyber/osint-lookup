@@ -9,6 +9,8 @@ import json
 import os
 import re
 
+from . import cognitive
+
 
 def contradictions(profiles: list[dict], entities: list[dict]) -> list[dict]:
     found = []
@@ -96,6 +98,7 @@ def synthesize(
         "profiles": lines_profiles,
         "associates": relationships,
         "interests": interests,
+        "cognitive": cognitive.evaluate(profiles, artifacts, entities),
         "geo_temporal": {"locations": locations, "events": events[:20]},
         "technical_profile": [i for i in interests if i in {"tech", "crypto", "trading"}],
         "fraud_history": [a for a in artifacts if a.get("platform") == "pantip"][:10],
@@ -161,6 +164,30 @@ def render_markdown(data: dict, run: dict) -> str:
         f"- {item['name']} ↔ {item['handle']} (พบร่วม {item['strength']} ครั้ง)" for item in data["associates"]
     ])
     section("5. Lifestyle & Interests", [f"- {item}" for item in data["interests"]])
+
+    out.append("## 5B. 6D Cognitive Profiling")
+    out.append("")
+    labels = {
+        "identity": "Identity",
+        "geo_temporal": "Geo-temporal",
+        "psychological": "Psychological (OCEAN)",
+        "technical": "Technical",
+        "ideological": "Ideological",
+        "opsec": "OpSec / Attack Surface",
+    }
+    for key, label in labels.items():
+        item = data["cognitive"].get(key) or {}
+        out.append(f"### {label}")
+        out.append(f"- **{item.get('confidence', 'Unverified')}** — {item.get('assessment', 'ประเมินไม่ได้')}")
+        if item.get("rationale"):
+            out.append(f"- เหตุผล: {item['rationale']}")
+        if item.get("evidence"):
+            out.append(f"- Evidence: {', '.join(item['evidence'][:8])}")
+        if item.get("metrics"):
+            out.append(f"- ตัวชี้วัด: {json.dumps(item['metrics'], ensure_ascii=False)}")
+        out.append("")
+    out.append("*OCEAN เป็นสมมติฐานจากสถิติข้อความ ไม่ใช่แบบประเมินจิตวิทยา*")
+    out.append("")
     section("6. Geo-temporal Signals", [f"- {item['date']}: {item['title']}" for item in data["geo_temporal"]["events"]])
     section("7. Technical Profile", [f"- {item}" for item in data["technical_profile"]])
     section("8. Fraud / Scam History", [
@@ -210,6 +237,19 @@ def llm_synthesize(data: dict, run: dict) -> dict:
         if not match:
             return data
         parsed = json.loads(match.group(0))
-        return {**data, **{key: value for key, value in parsed.items() if key in data}}
+        merged = {**data, **{key: value for key, value in parsed.items() if key in data}}
+        merged["findings"] = _validate_findings(merged.get("findings") or [], data)
+        return merged
     except Exception:  # noqa: BLE001
         return data
+
+
+def _validate_findings(findings: list[dict], data: dict) -> list[dict]:
+    """ตัด finding ที่อ้าง evidence id ไม่มีจริง"""
+    valid = {item for item in data.get("artifact_ids", [])}
+    kept = []
+    for finding in findings:
+        evidence = [eid for eid in (finding.get("evidence") or []) if eid in valid]
+        if evidence:
+            kept.append({**finding, "evidence": evidence})
+    return kept

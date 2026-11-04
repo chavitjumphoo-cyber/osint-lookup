@@ -162,7 +162,23 @@ def cmd_export(args, store: RunStore) -> int:
     if not payload:
         print(f"ไม่พบ run {args.run_id}", file=sys.stderr)
         return 1
-    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    if args.research:
+        from .profiling import profile_resolver, research_report
+
+        artifacts = store.list_artifacts(args.run_id)
+        entities = profile_resolver.extract_entities(artifacts)
+        profiles = profile_resolver.resolve_profiles(artifacts, entities)
+        markdown = research_report.build_markdown(
+            payload, artifacts, store.list_findings(args.run_id), profiles, entities
+        )
+        if args.docx:
+            target = args.output or f"research_{args.run_id}.docx"
+            research_report.to_docx(markdown, target)
+            print(f"เขียนแล้ว: {target}")
+            return 0
+        text = markdown
+    else:
+        text = json.dumps(payload, ensure_ascii=False, indent=2)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as handle:
             handle.write(text)
@@ -222,6 +238,8 @@ def main(argv: list[str] | None = None) -> int:
     export = sub.add_parser("export", help="ส่งออก run เป็น JSON")
     export.add_argument("run_id")
     export.add_argument("--output", "-o")
+    export.add_argument("--research", action="store_true", help="ออกรายงานวิจัยจาก run")
+    export.add_argument("--docx", action="store_true", help="ออกรายงานวิจัยเป็น .docx")
 
     review = sub.add_parser("review", help="แสดงหลักฐาน/candidate และตัดสินได้")
     review.add_argument("run_id")

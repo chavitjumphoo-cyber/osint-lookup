@@ -115,6 +115,33 @@ def create_app(store: RunStore | None = None) -> FastAPI:
             raise RunNotFound(run_id)
         return {"run_id": run_id, "findings": store.list_findings(run_id)}
 
+    @app.get("/runs/{run_id}/research-report")
+    def research_report(run_id: str, format: str = "md"):
+        import tempfile
+
+        from fastapi.responses import FileResponse
+
+        from ..profiling import profile_resolver
+        from ..profiling import research_report as builder
+
+        run = store.get_run(run_id)
+        if not run:
+            raise RunNotFound(run_id)
+        artifacts = store.list_artifacts(run_id)
+        entities = profile_resolver.extract_entities(artifacts)
+        profiles = profile_resolver.resolve_profiles(artifacts, entities)
+        markdown = builder.build_markdown(run, artifacts, store.list_findings(run_id), profiles, entities)
+        if format == "docx":
+            from pathlib import Path
+
+            path = builder.to_docx(markdown, Path(tempfile.gettempdir()) / f"research_{run_id}.docx")
+            return FileResponse(
+                path,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                filename=f"research_{run_id}.docx",
+            )
+        return {"run_id": run_id, "markdown": markdown}
+
     @app.get("/runs/{run_id}/export")
     def export(run_id: str) -> dict:
         data = store.to_dict(run_id)

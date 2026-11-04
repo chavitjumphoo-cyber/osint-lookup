@@ -10,7 +10,12 @@ from osint_agent.services.store import RunStore
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def store(tmp_path):
+    return RunStore(tmp_path / "runs.sqlite")
+
+
+@pytest.fixture
+def client(store, monkeypatch):
     def fake_search(query, limit=8):
         return [Artifact(source_url="https://github.com/user", source_type="search_result",
                          source_tool="search:fake", platform="github", title="John", content="dev")]
@@ -22,7 +27,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(orch.collectors, "search", fake_search)
     monkeypatch.setattr(orch.collectors, "fetch", fake_fetch)
     monkeypatch.setattr(orch.collectors, "scan_profiles", lambda u, timeout=45: [])
-    app = create_app(RunStore(tmp_path / "runs.sqlite"))
+    app = create_app(store)
     return TestClient(app)
 
 
@@ -82,3 +87,18 @@ def test_export_shape(client):
     data = client.get(f"/runs/{run_id}/export").json()
     assert data["target_type"] == "phone"
     assert data["findings"]
+
+
+def test_research_report_endpoint(store, client):
+    run_id = store.create_run("johndoe", "username", "quick")
+    store.add_artifact(
+        run_id,
+        {"artifact_id": "a1", "source_url": "https://x", "source_type": "search_result", "platform": "github"},
+    )
+    response = client.get(f"/runs/{run_id}/research-report")
+    assert response.status_code == 200
+    assert "บทคัดย่อ" in response.json()["markdown"]
+
+    docx = client.get(f"/runs/{run_id}/research-report?format=docx")
+    assert docx.status_code == 200
+    assert docx.content[:2] == b"PK"
