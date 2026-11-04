@@ -12,7 +12,6 @@ from anthropic import Anthropic
 
 from .system_prompt import SYSTEM_PROMPT
 from .tools import build_tool_list, execute_tool
-from .identity_triangulation import IdentityTriangulator
 
 MODEL = "claude-sonnet-5"
 MAX_STEPS = 16
@@ -30,7 +29,7 @@ def read_config() -> dict:
     values = {}
     if not os.path.exists(path):
         return values
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -152,16 +151,6 @@ def run_osint_lookup(
     # ใช้ API key จาก frontend ถ้ามี ไม่งั้นใช้จาก .env
     api_keys = api_keys or {}
     client = _build_client(api_key_override=api_keys.get("anthropic"))
-
-    # สร้าง Identity Triangulator สำหรับ session นี้
-    triangulator = IdentityTriangulator()
-
-    # เก็บ API keys ใน environment สำหรับ tools
-    import os
-    if api_keys.get("google"):
-        os.environ["GOOGLE_API_KEY"] = api_keys["google"]
-    if api_keys.get("google_cx"):
-        os.environ["GOOGLE_CX"] = api_keys["google_cx"]
 
     context_block = (
         f"\n\n# ข้อมูล input ของคำขอนี้\n"

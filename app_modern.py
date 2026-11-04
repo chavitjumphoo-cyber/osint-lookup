@@ -2,13 +2,18 @@
 
 import hmac
 import html
+import threading
+import time
 from datetime import datetime
+
 import streamlit as st
 
 from osint_agent.access import audit
-from osint_agent.agent import _build_client, read_config, run_osint_lookup
+from osint_agent.agent import _build_client, read_config
 from osint_agent.graph import build_graph_html, build_relationship_graph
 from osint_agent.report_export import build_report_html
+from osint_agent.services.orchestrator import Orchestrator
+from osint_agent.services.store import RunStore
 
 st.set_page_config(page_title="OSINT Lookup", page_icon="◆", layout="wide", initial_sidebar_state="collapsed")
 
@@ -393,32 +398,11 @@ with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ 
         key="anthropic_api_key"
     )
 
-    st.markdown("**Google Search API (Optional)**")
-    google_key = st.text_input(
-        "Google API Key",
-        type="password",
-        placeholder="AIzaSy...",
-        help="ใช้สำหรับค้นหา Google แบบ API (ถ้าไม่ใส่จะใช้ googlesearch-python)",
-        key="google_api_key"
-    )
-    google_cx = st.text_input(
-        "Google Custom Search Engine ID",
-        placeholder="0123456789abcdef:...",
-        help="Search Engine ID สำหรับ Google Custom Search",
-        key="google_cx"
-    )
-
     if st.button("💾 บันทึก API Keys"):
         saved_count = 0
         # เก็บใน session state (เฉพาะที่มีค่า)
         if anthropic_key:
             st.session_state["saved_anthropic_key"] = anthropic_key
-            saved_count += 1
-        if google_key:
-            st.session_state["saved_google_key"] = google_key
-            saved_count += 1
-        if google_cx:
-            st.session_state["saved_google_cx"] = google_cx
             saved_count += 1
 
         if saved_count > 0:
@@ -446,6 +430,12 @@ with st.form("investigate"):
         identifier_value = st.text_input(
             "ค่าที่ต้องการตรวจสอบ", placeholder=TYPES[identifier_type]
         )
+
+    col3, col4 = st.columns(2)
+    profile = col3.selectbox("ความลึก", ["quick", "standard", "deep"], index=1)
+    trusted_raw = col4.text_input(
+        "Verified accounts (คั่นด้วย ,)", placeholder="github:johndoe, email:a@b.com"
+    )
 
     submitted = st.form_submit_button("เริ่มสืบสวน  →")
     context = ""
@@ -539,38 +529,77 @@ if submitted:
         timeline_container.markdown(timeline_html, unsafe_allow_html=True)
 
     try:
-        # ส่ง API Keys ไปยัง Backend (ถ้ามี override)
-        api_keys = {}
-        if "saved_anthropic_key" in st.session_state:
-            api_keys["anthropic"] = st.session_state["saved_anthropic_key"]
-        if "saved_google_key" in st.session_state:
-            api_keys["google"] = st.session_state["saved_google_key"]
-        if "saved_google_cx" in st.session_state:
-            api_keys["google_cx"] = st.session_state["saved_google_cx"]
+        import os
 
-        # ถ้าไม่มี API keys ระบบจะใช้ .env configuration
-        report = run_osint_lookup(
-            identifier_type=identifier_type,
-            identifier_value=value,
-            context=context,
-            on_event=on_event,
-            api_keys=api_keys if api_keys else None,  # ส่ง None ถ้าไม่มี
-        )
+        if st.session_state.get("saved_anthropic_key"):
+            os.environ["ANTHROPIC_API_KEY"] = st.session_state["saved_anthropic_key"]
+        trusted = [part.strip() for part in trusted_raw.split(",") if part.strip()]
+        store = RunStore()
+        orchestrator = Orchestrator(store)
 
-        # Final report
+        run_id = orchestrator.start(value, profile, trusted)
+        thread = threading.Thread(target=orchestrator.run, args=(run_id,), daemon=True)
+        thread.start()
+
+        cursor = 0
+        while thread.is_alive():
+            for event in store.list_events(run_id, cursor):
+                cursor = event["seq"]
+                kind = event["kind"]
+                if kind in ("tool", "result", "candidate", "budget", "error", "report"):
+                    icon = "⚙️" if kind == "tool" else "✓" if kind == "report" else "↳"
+                    timeline_items.append(
+                        f'<div class="timeline-item"><div class="timeline-icon success">{icon}</div>'
+                        f'<div><div class="timeline-title">{html.escape(event["text"][:240])}</div></div></div>'
+                    )
+                    timeline_container.markdown(
+                        '<div class="timeline">' + "".join(timeline_items) + "</div>",
+                        unsafe_allow_html=True,
+                    )
+            time.sleep(0.3)
+        thread.join()
+
+        payload = store.to_dict(run_id) or {}
+        report = payload.get("report") or "ไม่สามารถสร้างรายงานได้"
+        findings = payload.get("findings") or []
+        candidates = payload.get("candidates") or []
+
         report_area.markdown(
-            f'<div class="report">{report}</div>',
-            unsafe_allow_html=True,
+            f'<div class="report">{report}</div>', unsafe_allow_html=True
         )
 
-        # Tabs for additional views
         st.markdown("---")
-        tab_report, tab_graph, tab_export = st.tabs(
-            ["📄 รายงานเต็ม", "🕸️ ผังความสัมพันธ์", "💾 ส่งออก"]
+        tab_report, tab_evidence, tab_candidates, tab_graph, tab_export = st.tabs(
+            ["📄 รายงาน", "🧾 หลักฐาน", "👥 Candidates", "🕸️ ผัง", "💾 ส่งออก"]
         )
 
         with tab_report:
             st.markdown(report, unsafe_allow_html=True)
+
+        with tab_evidence:
+            for finding in findings:
+                st.markdown(
+                    f"**{finding['tool']}** · `{finding['status']}` · "
+                    f"`{finding.get('output_hash', '')[:23]}…`"
+                )
+                st.code(finding["output"][:2000] or "-")
+                st.divider()
+
+        with tab_candidates:
+            if not candidates:
+                st.info("ไม่พบ identity candidate")
+            for candidate in candidates:
+                st.markdown(
+                    f"`{candidate['candidate_id']}` · **{candidate['status']}** · "
+                    f"{', '.join(candidate.get('entity_ids', []))}"
+                )
+                cols = st.columns(3)
+                for label, action in (("ยืนยัน", "confirm"), ("ตัด", "reject"), ("ย้อน", "reverse")):
+                    if cols[0 if action == "confirm" else 1 if action == "reject" else 2].button(
+                        label, key=f"{candidate['candidate_id']}-{action}"
+                    ):
+                        store.decide_candidate(run_id, candidate["candidate_id"], action)
+                        st.rerun()
 
         with tab_graph:
             with st.spinner("กำลังสร้างผังความสัมพันธ์…"):
@@ -578,18 +607,13 @@ if submitted:
                 graph_html = build_graph_html(graph)
             if graph_html:
                 st.components.v1.html(graph_html, height=560, scrolling=False)
-                st.caption(
-                    f"{len(graph['nodes'])} โหนด · {len(graph.get('edges') or [])} ความสัมพันธ์"
-                )
             else:
                 st.info("รายงานนี้ยังไม่มีความสัมพันธ์ที่ยืนยันได้")
 
         with tab_export:
             col1, col2 = st.columns(2)
             with col1:
-                html_export = build_report_html(
-                    value, report, graph if graph_html else None
-                )
+                html_export = build_report_html(report, identifier_type, value, context)
                 st.download_button(
                     "📥 ดาวน์โหลด HTML",
                     html_export,

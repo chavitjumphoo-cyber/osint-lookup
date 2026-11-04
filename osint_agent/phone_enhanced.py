@@ -2,11 +2,9 @@
 
 import re
 import urllib.parse
-from typing import Dict, List, Optional
 
 import phonenumbers
 from phonenumbers import carrier, geocoder, timezone
-
 
 # Thai carrier prefixes (updated 2026)
 THAI_CARRIERS = {
@@ -18,7 +16,7 @@ THAI_CARRIERS = {
 }
 
 
-def detect_thai_carrier(phone_e164: str) -> Optional[str]:
+def detect_thai_carrier(phone_e164: str) -> str | None:
     """ตรวจสอบค่ายมือถือไทยจากเลขหมาย — แม่นยำกว่า phonenumbers library"""
     if not phone_e164.startswith("+66"):
         return None
@@ -36,10 +34,9 @@ def detect_thai_carrier(phone_e164: str) -> Optional[str]:
     return None
 
 
-def build_phone_footprints(phone_e164: str, country_iso: str = "") -> Dict[str, str]:
+def build_phone_footprints(phone_e164: str, country_iso: str = "") -> dict[str, str]:
     """สร้าง footprint URLs รวม GetContact, Whoscall และ fraud databases"""
     clean_digits = re.sub(r"\D", "", phone_e164)
-    local_format = phone_e164.replace("+", "")
 
     footprints = {
         # Social & Messaging
@@ -69,7 +66,7 @@ def build_phone_footprints(phone_e164: str, country_iso: str = "") -> Dict[str, 
     return footprints
 
 
-def enhanced_phone_scan(phone_number: str, default_region: str = "TH") -> Dict:
+def enhanced_phone_scan(phone_number: str, default_region: str = "TH") -> dict:
     """สแกนเบอร์แบบเต็มรูปแบบ พร้อม Thai carrier detection และ fraud database links"""
     clean_input = phone_number.strip()
 

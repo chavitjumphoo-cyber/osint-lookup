@@ -1,0 +1,36 @@
+id: username
+target_types: [username]
+trigger: "ได้ username หรือ handle"
+profiles: [quick, standard, deep]
+max_steps:
+  quick: 4
+  standard: 7
+  deep: 12
+required_tools:
+  - scan_platforms
+  - sherlock_username
+steps:
+  - tool: scan_platforms
+    why: "จำแนก found/unknown/blocked อย่างซื่อตรง"
+    profiles: [quick, standard, deep]
+  - tool: sherlock_username
+    why: "ตรวจซ้ำด้วยฐาน Sherlock"
+    profiles: [quick, standard, deep]
+  - tool: web_search
+    why: "ค้น username แบบ site-limited"
+    profiles: [standard, deep]
+  - tool: github_intel
+    why: "ดึง bio/ชื่อ/เว็บจาก GitHub API"
+    profiles: [deep]
+  - tool: search_evidence
+    why: "ค้นหลักฐานที่เก็บมาแล้วด้วย BM25"
+    profiles: [deep]
+outputs: [profile_url, display_name]
+anti_patterns:
+  - "อย่าถือว่า username หรือเบอร์ที่ซ้ำกันคือคนเดียวกันโดยไม่มีบริบท"
+  - "อย่ารายงานผลว่าเป็นข้อเท็จจริงถ้า tool ตอบ blocked หรือ unknown"
+  - "อย่าใช้เครื่องมือซ้ำคำค้นเดิมถ้ารอบก่อนไม่ให้ข้อมูลใหม่"
+stop_conditions:
+  - "ได้หลักฐานตรง (direct) อย่างน้อย 2 ชิ้นที่ยืนยันตัวตนเดียวกัน"
+  - "เหลือเฉพาะเครื่องมือที่ต้องล็อกอินหรือมีค่าใช้จ่าย"
+  - "ครบเพดาน step ของ profile"

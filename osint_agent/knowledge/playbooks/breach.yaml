@@ -1,0 +1,22 @@
+id: breach
+target_types: [email]
+trigger: "อีเมลอยู่ในเหตุข้อมูลรั่ว"
+profiles: [quick, standard, deep]
+max_steps:
+  quick: 3
+  standard: 5
+  deep: 8
+required_tools:
+  - breach_check
+steps:
+  - tool: breach_check
+    why: "ยืนยันการรั่วและช่วงปี"
+    profiles: [quick, standard, deep]
+  - tool: gravatar_lookup
+    why: "หาโปรไฟล์ที่ผูกกับอีเมล"
+    profiles: [standard, deep]
+outputs: [breach_name, breach_date, linked_avatar]
+anti_patterns:
+  - "ห้ามอ้างว่ามีรหัสผ่านถ้าไม่ได้ดึงข้อมูลนั้น"
+stop_conditions:
+  - "ได้รายชื่อเหตุการณ์รั่วครบ"

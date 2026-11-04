@@ -8,13 +8,36 @@ AI-powered OSINT tool for comprehensive identity research across 30+ platforms u
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure .env (see Configuration section)
+# Configure .env (ดู .env.example)
 
-# Run Streamlit app
+# CLI
+python -m osint_agent.cli doctor
+python -m osint_agent.cli scan johndoe -p quick
+
+# REST + SSE API
+python -m uvicorn osint_agent.api.app:app --port 8000
+curl -X POST localhost:8000/investigate -H 'content-type: application/json' \
+  -d '{"target":"johndoe","profile":"quick"}'
+
+# Streamlit (thin client)
 python -m streamlit run app_modern.py
 ```
 
-Then open browser: **http://localhost:8501**
+เปิด API docs ที่ **http://localhost:8000/docs** หรือ Streamlit ที่ **http://localhost:8501**
+
+## 🖥️ CLI
+
+| คำสั่ง | ใช้ทำอะไร |
+|---|---|
+| `doctor` | ตรวจความพร้อมของเครื่อง |
+| `scan <target> -p quick` | สแกนและแสดงผลทันที (profile: quick/standard/deep) |
+| `agent <target>` | รันด้วย profile standard |
+| `resume <run_id>` | ทำ run เดิมต่อจาก checkpoint |
+| `export <run_id> -o out.json` | ส่งออกหลักฐาน |
+| `review <run_id>` | ตรวจหลักฐาน/candidate |
+| `review <run_id> --candidate c1 --action confirm` | ตัดสิน candidate |
+
+เพิ่ม `--db path.sqlite` หน้า subcommand เพื่อแยกฐาน run
 
 ## ⚙️ Configuration
 
@@ -27,9 +50,6 @@ ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_API_KEY=ccsk-...
 ANTHROPIC_BASE_URL=https://api.maxplus-ai.cc
 
-# Optional — Google Search API
-GOOGLE_API_KEY=AIzaSy...
-GOOGLE_CX=your-search-engine-id
 ```
 
 **API Keys are optional** — the app will use defaults from `.env` if not provided via UI.
@@ -44,9 +64,9 @@ osint-lookup/
 ├── requirements.txt            # Dependencies
 └── osint_agent/                # Backend engine
     ├── agent.py               # ReAct loop orchestrator
-    ├── tools.py               # 15+ OSINT tools
-    ├── platform_scanner.py    # 30+ platform scanner
-    ├── identity_triangulation.py  # Identity linking engine
+    ├── cli.py                 # CLI (doctor; scan/agent/resume ตาม Phase 2)
+    ├── tools/                 # OSINT tools แยกหมวด + lazy import
+    ├── platform_scanner.py    # 30+ platform scanner (found/not_found/blocked/unknown)
     ├── advanced_tools.py      # Avatar/stylometry analysis
     ├── system_prompt.py       # AI agent instructions
     ├── synint_agents.py       # SYNINT-inspired agents
@@ -92,7 +112,7 @@ osint-lookup/
 - **Frontend**: Streamlit (Python-based, no Node.js required)
 - **Backend**: Python 3.8+
 - **AI**: Anthropic Claude (or MaxPlus-compatible API)
-- **Search**: Google Custom Search + platform-specific APIs
+- **Search**: multi-engine ผ่าน Moli (DuckDuckGo/Yahoo/Brave/Bing/Yandex) — ไม่ใช้ API key
 - **Visualization**: PyVis (relationship graphs)
 
 ## 📋 Usage Example
@@ -144,7 +164,13 @@ rm -rf ~/.streamlit/cache
 rm -rf .streamlit
 ```
 
+### ตรวจความพร้อมของเครื่อง
+```bash
+python -m osint_agent.cli doctor
+```
+
 ### Test backend
 ```bash
-python -c "from osint_agent.agent import run_osint_lookup; print('OK')"
+make test        # ไม่ยิงเน็ต
+make test-network
 ```

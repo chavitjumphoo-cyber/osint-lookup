@@ -1,0 +1,39 @@
+id: domain
+target_types: [domain, url]
+trigger: "ได้โดเมนหรือ URL"
+profiles: [quick, standard, deep]
+max_steps:
+  quick: 4
+  standard: 7
+  deep: 12
+required_tools:
+  - verify_official
+  - fetch_page
+steps:
+  - tool: verify_official
+    why: "เทียบโดเมนกับหน่วยงานทางการ"
+    profiles: [quick, standard, deep]
+  - tool: fetch_page
+    why: "อ่านหน้าเว็บ"
+    profiles: [quick, standard, deep]
+  - tool: dns_lookup
+    why: "ตรวจ A/MX/TXT/NS"
+    profiles: [standard, deep]
+  - tool: whois_lookup
+    why: "ตรวจ registrar/อายุโดเมนผ่าน RDAP"
+    profiles: [deep]
+  - tool: wayback_lookup
+    why: "ดูเส้นทางเก่าและหน้าที่ถูกลบ"
+    profiles: [deep]
+  - tool: search_evidence
+    why: "ค้นหลักฐานที่เก็บมาแล้วด้วย BM25"
+    profiles: [deep]
+outputs: [domain, ip, dns, phishing_signal]
+anti_patterns:
+  - "อย่าถือว่า username หรือเบอร์ที่ซ้ำกันคือคนเดียวกันโดยไม่มีบริบท"
+  - "อย่ารายงานผลว่าเป็นข้อเท็จจริงถ้า tool ตอบ blocked หรือ unknown"
+  - "อย่าใช้เครื่องมือซ้ำคำค้นเดิมถ้ารอบก่อนไม่ให้ข้อมูลใหม่"
+stop_conditions:
+  - "ได้หลักฐานตรง (direct) อย่างน้อย 2 ชิ้นที่ยืนยันตัวตนเดียวกัน"
+  - "เหลือเฉพาะเครื่องมือที่ต้องล็อกอินหรือมีค่าใช้จ่าย"
+  - "ครบเพดาน step ของ profile"

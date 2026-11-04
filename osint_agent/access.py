@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_DIR = os.path.join(ROOT, "audit")
@@ -34,7 +34,7 @@ def audit(event: str, actor: dict, **details) -> dict:
     os.makedirs(AUDIT_DIR, exist_ok=True)
     with _lock:
         entry = {
-            "time": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+            "time": datetime.now(UTC).astimezone().isoformat(timespec="seconds"),
             "event": event,
             "actor": actor.get("name"),
             **details,
@@ -53,7 +53,7 @@ def verify_audit_chain() -> tuple[bool, int, str]:
         return True, 0, "ยังไม่มีบันทึก"
     prev = "0" * 64
     count = 0
-    with open(AUDIT_FILE, "r", encoding="utf-8") as fh:
+    with open(AUDIT_FILE, encoding="utf-8") as fh:
         for count, line in enumerate(fh, start=1):
             entry = json.loads(line)
             stored = entry.pop("hash", None)

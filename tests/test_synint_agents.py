@@ -1,6 +1,5 @@
 """Tests for SYNINT-inspired agents"""
 
-import json
 from osint_agent import synint_agents
 
 

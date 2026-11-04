@@ -1,0 +1,292 @@
+"""Configuración del Core.
+
+Por qué aquí:
+- Centraliza variables de entorno (pydantic-settings) sin contaminar la CLI.
+- Permite que adaptadores (HTTP/IA) lean config de forma consistente.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+from pydantic import Field, SecretStr, model_validator
+from pydantic_settings import BaseSettings, DotEnvSettingsSource, SettingsConfigDict
+
+from vendor.osint_d2.core.domain.language import Language
+
+AI_PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    # Nota: los modelos disponibles cambian según el proveedor/plan.
+    "deepseek": {"base_url": "https://api.deepseek.com", "model": "deepseek-chat"},
+    "openai": {"base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
+    "groq": {"base_url": "https://api.groq.com/openai/v1", "model": "openai/gpt-oss-120b"},
+    # Según la documentación de Groq, este modelo es solo para clientes Enterprise.
+    "groq-70b": {"base_url": "https://api.groq.com/openai/v1", "model": "llama-3.3-70b-versatile"},
+    # Velocidad (más barato/rápido):
+    "groq-fast": {"base_url": "https://api.groq.com/openai/v1", "model": "openai/gpt-oss-20b"},
+    "openrouter": {"base_url": "https://openrouter.ai/api/v1", "model": "openai/gpt-4o-mini"},
+    "huggingface": {"base_url": "https://router.huggingface.co/v1", "model": "meta-llama/Llama-3.1-8B-Instruct"},
+    # Local (gratis, privado, requiere instalar Ollama):
+    "ollama": {"base_url": "http://localhost:11434/v1", "model": "llama3"},
+}
+
+
+def get_user_config_dir() -> Path:
+    """Directorio de configuración por usuario (cross-platform, sin dependencias).
+
+    Objetivo: permitir un instalador/PyInstaller sin necesidad de editar `.env` en el proyecto.
+    """
+
+    if sys.platform.startswith("win"):
+        base = Path(os.environ.get("APPDATA", str(Path.home())))
+        return base / "osint-d2"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "osint-d2"
+
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return Path(xdg) / "osint-d2"
+    return Path.home() / ".config" / "osint-d2"
+
+
+def get_user_env_file() -> Path:
+    return get_user_config_dir() / ".env"
+
+
+def _parse_env_lines(text: str) -> dict[str, str]:
+    data: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            data[key] = value
+    return data
+
+
+def write_user_env_vars(values: dict[str, str]) -> Path:
+    """Escribe/actualiza variables en el .env global del usuario."""
+
+    env_path = get_user_env_file()
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Si no se puede leer, el error sube: reescribir borraría las demás claves.
+    existing: dict[str, str] = {}
+    if env_path.exists():
+        existing = _parse_env_lines(env_path.read_text(encoding="utf-8"))
+
+    existing.update({k: v for k, v in values.items() if v is not None})
+
+    lines = ["# OSINT-D2 user config (.env)"]
+    for key in sorted(existing.keys()):
+        lines.append(f"{key}={existing[key]}")
+    # Contiene API keys: solo legible por el propietario, también durante la escritura.
+    fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as env_file:
+        env_path.chmod(0o600)
+        env_file.write("\n".join(lines) + "\n")
+    return env_path
+
+
+# Gana el último: el .env del proyecto (dev) prevalece sobre el global (PyInstaller).
+ENV_FILES = (str(get_user_env_file()), ".env")
+
+
+class AppSettings(BaseSettings):
+    """Configuración central de la aplicación.
+
+    Por qué pydantic-settings:
+    - Tipado + validación en el borde (env vars) sin ensuciar el Core con lógica.
+    - Un único contrato de configuración para CLI/adapters.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="OSINT_D2_",
+        extra="ignore",
+        case_sensitive=False,
+        env_file=ENV_FILES,
+        env_file_encoding="utf-8",
+    )
+
+    http_timeout_seconds: float = Field(
+        default=20.0,
+        gt=0,
+        description="Timeout por request (segundos).",
+    )
+    user_agent: str = Field(
+        default="osint-d2/3.0",
+        min_length=1,
+        description="User-Agent para peticiones OSINT.",
+    )
+
+    ai_provider: str = Field(
+        default="deepseek",
+        description="Proveedor de IA: 'deepseek', 'openai' o 'ollama'.",
+    )
+    ai_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key para el proveedor IA (opcional en Ollama).",
+    )
+    ai_base_url: str = Field(
+        default="https://api.deepseek.com",
+        min_length=8,
+        description="Base URL compatible OpenAI (DeepSeek, Ollama /v1, etc.).",
+    )
+    ai_model: str = Field(
+        default="deepseek-chat",
+        min_length=1,
+        description="Modelo por defecto para análisis.",
+    )
+
+    ai_timeout_seconds: float = Field(
+        default=45.0,
+        gt=0,
+        description="Timeout para llamadas al proveedor IA (segundos).",
+    )
+    ai_max_retries: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Reintentos máximos ante fallos transitorios (rate limit, red).",
+    )
+
+    # Site-lists (data-driven, estilo WhatsMyName/email-data)
+    sites_max_concurrency: int = Field(
+        default=30,
+        ge=1,
+        le=50,
+        description=(
+            "Concurrencia máxima global para el motor data-driven de listas de sitios. "
+            "⚠️ Valores altos sin rate limiting pueden causar bans de IP y falsos negativos."
+        ),
+    )
+
+    # ── Rate Limiting (responsible scanning) ──────────────────────────
+    request_delay_ms: int = Field(
+        default=200,
+        ge=0,
+        le=5000,
+        description="Delay mínimo (ms) entre requests al mismo dominio.",
+    )
+    request_jitter_ms: int = Field(
+        default=100,
+        ge=0,
+        le=2000,
+        description="Jitter ± (ms) añadido al delay entre requests al mismo dominio.",
+    )
+    per_domain_concurrency: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        description="Máximo de requests concurrentes permitidos al mismo dominio.",
+    )
+    retry_max_attempts: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Reintentos máximos ante respuestas 429/503 con backoff exponencial.",
+    )
+    sites_no_nsfw: bool = Field(
+        default=True,
+        description="Excluir categorías NSFW en site-lists.",
+    )
+    username_sites_path: Path | None = Field(
+        default=None,
+        description="Ruta local a un JSON de sitios para username (p.ej. wmn-data.json).",
+    )
+    email_sites_path: Path | None = Field(
+        default=None,
+        description="Ruta local a un JSON de sitios para email (p.ej. email-data.json).",
+    )
+
+    default_language: Language = Field(
+        default=Language.ENGLISH,
+        description="Idioma por defecto para prompts y reportes (en/es).",
+    )
+
+    hibp_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key de Have I Been Pwned, necesaria para comprobar brechas.",
+    )
+
+    # ── ScrapingAnt Proxy ──────────────────────────────────────────────
+    proxy_mode: str | None = Field(
+        default=None,
+        description=(
+            "Proxy mode: 'residential', 'datacenter', or None (direct). "
+            "Auto-detected from proxy_api_key if not set explicitly."
+        ),
+    )
+    proxy_api_key: SecretStr | None = Field(
+        default=None,
+        description="ScrapingAnt API/proxy key (password for proxy auth).",
+    )
+    proxy_username: str | None = Field(
+        default=None,
+        description="ScrapingAnt proxy username (e.g. 'myuser123').",
+    )
+    proxy_country: str = Field(
+        default="",
+        description="2-letter country code for geo-targeted proxies (e.g. 'us').",
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings,
+    ):
+        # `cp .env.example .env` leaves blank keys, which must not hide the saved ones.
+        # Only in files: a blank environment variable still clears a setting on purpose.
+        dotenv = DotEnvSettingsSource(settings_cls, env_file=dotenv_settings.env_file, env_ignore_empty=True)
+        return init_settings, env_settings, dotenv, file_secret_settings
+
+    @model_validator(mode="after")
+    def _apply_provider_preset(self) -> "AppSettings":
+        """Sin URL o modelo explícitos, usa los del proveedor.
+
+        Evita enviar la key de un proveedor al endpoint por defecto de otro.
+        """
+        preset = AI_PROVIDER_PRESETS.get(self.ai_provider.lower())
+        if preset:
+            if "ai_base_url" not in self.model_fields_set:
+                self.ai_base_url = preset["base_url"]
+            if "ai_model" not in self.model_fields_set:
+                self.ai_model = preset["model"]
+        return self
+
+    def key_belongs_to(self, provider: str) -> bool:
+        """Indica si la API key configurada corresponde a *provider*."""
+        preset = AI_PROVIDER_PRESETS.get(provider)
+        return provider == self.ai_provider.lower() or bool(preset and preset["base_url"] == self.ai_base_url)
+
+    @property
+    def effective_proxy_mode(self) -> str | None:
+        """Return the proxy mode to use, auto-detecting from key if needed."""
+        if self.proxy_mode:
+            return self.proxy_mode
+        if self.proxy_api_key:
+            return "residential"  # default when key is set
+        return None
+
+    sensitive_inferences: bool = Field(
+        default=False,
+        description="Include personality, ideology and attack-surface inferences in AI reports.",
+    )
+    report_retention_days: int | None = Field(
+        default=None,
+        ge=1,
+        description="Delete saved reports older than this many days. Unset keeps them.",
+    )
+
+    # ── Agent Mode ───────────────────────────────────────────────────
+    agent_max_steps: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Max reasoning steps for the autonomous agent mode.",
+    )

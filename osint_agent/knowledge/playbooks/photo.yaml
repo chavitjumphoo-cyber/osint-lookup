@@ -1,0 +1,19 @@
+id: photo
+target_types: [photo]
+trigger: "ได้ URL รูปหรือไฟล์ภาพ"
+profiles: [quick, standard, deep]
+max_steps:
+  quick: 2
+  standard: 4
+  deep: 6
+required_tools:
+  - fetch_page
+steps:
+  - tool: fetch_page
+    why: "เปิดหน้าเว็บที่เก็บรูปและดึงบริบท"
+    profiles: [quick, standard, deep]
+outputs: [image_url, context]
+anti_patterns:
+  - "ห้ามระบุตัวบุคคลจากใบหน้าเพียงอย่างเดียว"
+stop_conditions:
+  - "ได้บริบทสถานที่หรือเหตุการณ์"

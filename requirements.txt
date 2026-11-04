@@ -5,3 +5,16 @@ beautifulsoup4
 pyvis
 phonenumbers
 markdown
+googlesearch-python
+ddgs
+httpx
+pillow
+pytest
+pytest-asyncio
+ruff
+fastapi
+uvicorn
+typer
+pydantic
+pyyaml
+pydantic-settings

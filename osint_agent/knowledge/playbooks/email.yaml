@@ -1,0 +1,33 @@
+id: email
+target_types: [email]
+trigger: "ได้อีเมล"
+profiles: [quick, standard, deep]
+max_steps:
+  quick: 4
+  standard: 7
+  deep: 12
+required_tools:
+  - breach_check
+  - gravatar_lookup
+steps:
+  - tool: breach_check
+    why: "ตรวจประวัติข้อมูลรั่ว"
+    profiles: [quick, standard, deep]
+  - tool: gravatar_lookup
+    why: "ตรวจ Gravatar/PGP"
+    profiles: [quick, standard, deep]
+  - tool: web_search
+    why: "ค้นอีเมลตรงตัว"
+    profiles: [standard, deep]
+  - tool: search_evidence
+    why: "ค้นหลักฐานที่เก็บมาแล้วด้วย BM25"
+    profiles: [deep]
+outputs: [breach, avatar, linked_account]
+anti_patterns:
+  - "อย่าถือว่า username หรือเบอร์ที่ซ้ำกันคือคนเดียวกันโดยไม่มีบริบท"
+  - "อย่ารายงานผลว่าเป็นข้อเท็จจริงถ้า tool ตอบ blocked หรือ unknown"
+  - "อย่าใช้เครื่องมือซ้ำคำค้นเดิมถ้ารอบก่อนไม่ให้ข้อมูลใหม่"
+stop_conditions:
+  - "ได้หลักฐานตรง (direct) อย่างน้อย 2 ชิ้นที่ยืนยันตัวตนเดียวกัน"
+  - "เหลือเฉพาะเครื่องมือที่ต้องล็อกอินหรือมีค่าใช้จ่าย"
+  - "ครบเพดาน step ของ profile"

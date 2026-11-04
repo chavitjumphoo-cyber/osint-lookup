@@ -1,0 +1,41 @@
+id: phone
+target_types: [phone]
+trigger: "ได้เบอร์โทรจากผู้ใช้หรือ pivot ก่อนหน้า"
+profiles: [quick, standard, deep]
+max_steps:
+  quick: 4
+  standard: 7
+  deep: 12
+required_tools:
+  - phone_info
+  - scan_phone_advanced
+  - verify_official
+  - scan_platforms
+steps:
+  - tool: phone_info
+    why: "ตรวจรูปแบบ/ประเภท/ค่ายจากแผนเลขหมาย"
+    profiles: [quick, standard, deep]
+  - tool: scan_phone_advanced
+    why: "ตรวจ WhatsApp และ footprint"
+    profiles: [quick, standard, deep]
+  - tool: verify_official
+    why: "เทียบกับช่องทางหน่วยงานทางการ"
+    profiles: [quick, standard, deep]
+  - tool: scan_platforms
+    why: "ตรวจ WhatsApp presence"
+    profiles: [quick, standard, deep]
+  - tool: web_search
+    why: "ค้นเบอร์ทุกรูปแบบ (E.164, national, มีขีด)"
+    profiles: [standard, deep]
+  - tool: search_evidence
+    why: "ค้นหลักฐานที่เก็บมาแล้วด้วย BM25"
+    profiles: [deep]
+outputs: [phone, carrier, whatsapp_status, official_match]
+anti_patterns:
+  - "อย่าถือว่า username หรือเบอร์ที่ซ้ำกันคือคนเดียวกันโดยไม่มีบริบท"
+  - "อย่ารายงานผลว่าเป็นข้อเท็จจริงถ้า tool ตอบ blocked หรือ unknown"
+  - "อย่าใช้เครื่องมือซ้ำคำค้นเดิมถ้ารอบก่อนไม่ให้ข้อมูลใหม่"
+stop_conditions:
+  - "ได้หลักฐานตรง (direct) อย่างน้อย 2 ชิ้นที่ยืนยันตัวตนเดียวกัน"
+  - "เหลือเฉพาะเครื่องมือที่ต้องล็อกอินหรือมีค่าใช้จ่าย"
+  - "ครบเพดาน step ของ profile"

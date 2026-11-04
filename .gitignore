@@ -41,3 +41,6 @@ server.log
 
 # Audit logs (optional)
 audit/*.json
+
+# Run store
+audit/*.sqlite*

@@ -1,14 +1,14 @@
 """Tests for advanced OSINT tools — scan_phone_advanced, compare_avatars, stylometry"""
 
-import pytest
 from osint_agent import advanced_tools
 
 
 def test_dhash_same_image():
     """dHash ของรูปเดียวกันต้องเหมือนกัน"""
     # สร้างรูปสี่เหลี่ยมสีเดียวกัน 2 รูป
-    from PIL import Image
     import io
+
+    from PIL import Image
 
     img1 = Image.new("RGB", (100, 100), color="red")
     img2 = Image.new("RGB", (100, 100), color="red")
@@ -26,8 +26,9 @@ def test_dhash_same_image():
 
 def test_dhash_different_images():
     """dHash ของรูปต่างกันต้องต่างกัน"""
-    from PIL import Image, ImageDraw
     import io
+
+    from PIL import Image, ImageDraw
 
     # สร้างรูปที่มีลวดลายต่างกัน
     img1 = Image.new("RGB", (100, 100), color="white")
@@ -61,8 +62,9 @@ def test_hamming_distance():
 
 def test_compare_avatars_same():
     """เปรียบเทียบรูปเดียวกันต้องได้ matched=True"""
-    from PIL import Image
     import io
+
+    from PIL import Image
 
     img = Image.new("RGB", (100, 100), color="green")
     buf1 = io.BytesIO()

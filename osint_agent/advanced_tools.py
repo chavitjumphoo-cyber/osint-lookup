@@ -4,8 +4,6 @@
 - stylometry: character n-gram author correlation
 """
 
-import asyncio
-import hashlib
 import io
 import re
 import urllib.parse
@@ -21,7 +19,6 @@ from PIL import Image
 
 # Import enhanced phone scanner
 from .phone_enhanced import enhanced_phone_scan as _enhanced_scan
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Phone Scanner (WhatsApp + Footprint)
@@ -135,7 +132,6 @@ async def scan_phone(phone_number: str, default_region: str = "TH") -> PhoneScan
             ddg_url = f"https://html.duckduckgo.com/html/?q={query_parts}"
             resp = await client.get(ddg_url)
             if resp.status_code == 200:
-                text_lower = resp.text.lower()
                 name_patterns = [
                     r'<a class="result__a"[^>]*>([^<]+)</a>',
                     r'<b>([A-Z][a-z]+ [A-Z][a-z]+)</b>',
@@ -160,7 +156,7 @@ async def scan_phone(phone_number: str, default_region: str = "TH") -> PhoneScan
         timezones=result["timezones"],
         whatsapp_active=whatsapp_active,
         footprint_urls=footprints,
-        discovered_names=discovered_names,
+        associated_names=discovered_names,
     )
 
     is_valid = phonenumbers.is_valid_number(parsed)
