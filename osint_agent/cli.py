@@ -73,8 +73,11 @@ def _check_binaries() -> list[str]:
 def _check_config() -> tuple[list[str], list[str]]:
     config = read_config()
     problems, notes = [], []
-    if not config.get("ANTHROPIC_API_KEY") and not config.get("ANTHROPIC_BASE_URL"):
-        problems.append("ไม่มี ANTHROPIC_API_KEY หรือ ANTHROPIC_BASE_URL ใน .env")
+    if not any(
+        config.get(key)
+        for key in ("MAXPLUS_API_KEY", "MAXPLUS_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL")
+    ):
+        problems.append("ไม่มี MAXPLUS_API_KEY/BASE_URL หรือ ANTHROPIC_API_KEY/BASE_URL ใน .env")
     else:
         notes.append("พบค่า LLM ใน .env")
     if not config.get("HIBP_API_KEY"):

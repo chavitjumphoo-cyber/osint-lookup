@@ -387,25 +387,31 @@ st.markdown("### 🎯 เริ่มการสืบสวน", unsafe_allow_
 with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ config จาก .env หากไม่กำหนด)", expanded=False):
     st.info("💡 ระบบจะใช้ .env configuration เป็นค่าเริ่มต้น คุณสามารถ override ได้ด้านล่าง")
 
-    st.markdown("**Claude/Anthropic API (Optional)**")
-    st.markdown("ถ้าใช้ MaxPlus ให้ใส่ ccsk-... key")
-    anthropic_key = st.text_input(
-        "Anthropic/MaxPlus API Key",
-        type="password",
-        placeholder="sk-ant-api03-... หรือ ccsk-...",
-        help="Override Anthropic/MaxPlus key จาก .env (ถ้าไม่กำหนด ให้ใช้จาก .env)",
-        key="anthropic_api_key"
+    st.markdown("**MaxPlus (แนะนำ)**")
+    maxplus_key = st.text_input("MaxPlus API Key", type="password", key="maxplus_api_key")
+    maxplus_base = st.text_input(
+        "MaxPlus Base URL", placeholder="https://api.maxplus.example", key="maxplus_base_url"
     )
+    maxplus_model = st.text_input(
+        "MaxPlus Model", placeholder="ชื่อโมเดลที่บัญชีคุณใช้ได้", key="maxplus_model"
+    )
+
+    st.markdown("**Claude/Anthropic (ทางเลือก)**")
+    anthropic_key = st.text_input("Anthropic API Key", type="password", key="anthropic_api_key")
 
     if st.button("💾 บันทึก API Keys"):
         saved_count = 0
-        # เก็บใน session state (เฉพาะที่มีค่า)
-        if anthropic_key:
-            st.session_state["saved_anthropic_key"] = anthropic_key
-            saved_count += 1
-
-        if saved_count > 0:
-            st.success(f"✓ บันทึก {saved_count} API Key แล้ว")
+        for name, value in (
+            ("maxplus_key", maxplus_key),
+            ("maxplus_base", maxplus_base),
+            ("maxplus_model", maxplus_model),
+            ("anthropic_key", anthropic_key),
+        ):
+            if value:
+                st.session_state[f"saved_{name}"] = value
+                saved_count += 1
+        if saved_count:
+            st.success(f"✓ บันทึก {saved_count} ค่าแล้ว")
         else:
             st.info("ไม่มีการบันทึก — ระบบจะใช้ .env configuration")
 
@@ -530,6 +536,12 @@ if submitted:
     try:
         import os
 
+        if st.session_state.get("saved_maxplus_key"):
+            os.environ["MAXPLUS_API_KEY"] = st.session_state["saved_maxplus_key"]
+        if st.session_state.get("saved_maxplus_base"):
+            os.environ["MAXPLUS_BASE_URL"] = st.session_state["saved_maxplus_base"]
+        if st.session_state.get("saved_maxplus_model"):
+            os.environ["MAXPLUS_MODEL"] = st.session_state["saved_maxplus_model"]
         if st.session_state.get("saved_anthropic_key"):
             os.environ["ANTHROPIC_API_KEY"] = st.session_state["saved_anthropic_key"]
         trusted = [part.strip() for part in trusted_raw.split(",") if part.strip()]

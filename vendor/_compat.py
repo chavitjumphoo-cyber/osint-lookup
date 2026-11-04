@@ -24,9 +24,25 @@ def _project_config() -> dict:
 def settings_from_project() -> AppSettings:
     """สร้าง AppSettings ของ vendor จาก .env ของโปรเจกต์"""
     config = _project_config()
-    base_url = config.get("ANTHROPIC_BASE_URL") or os.environ.get("ANTHROPIC_BASE_URL")
-    api_key = config.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
-    model = config.get("ANTHROPIC_MODEL") or DEFAULT_MODEL
+    base_url = (
+        config.get("MAXPLUS_BASE_URL")
+        or config.get("ANTHROPIC_BASE_URL")
+        or os.environ.get("MAXPLUS_BASE_URL")
+        or os.environ.get("ANTHROPIC_BASE_URL")
+    )
+    api_key = (
+        config.get("MAXPLUS_API_KEY")
+        or config.get("ANTHROPIC_API_KEY")
+        or os.environ.get("MAXPLUS_API_KEY")
+        or os.environ.get("ANTHROPIC_API_KEY")
+    )
+    model = (
+        config.get("MAXPLUS_MODEL")
+        or config.get("ANTHROPIC_MODEL")
+        or os.environ.get("MAXPLUS_MODEL")
+        or os.environ.get("ANTHROPIC_MODEL")
+        or DEFAULT_MODEL
+    )
     hibp = config.get("HIBP_API_KEY") or os.environ.get("HIBP_API_KEY")
 
     overrides: dict[str, Any] = {

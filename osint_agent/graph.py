@@ -8,7 +8,7 @@
 import json
 import re
 
-from .agent import MODEL
+from .agent import model_name
 
 GRAPH_MAX_TOKENS = 2048
 
@@ -102,7 +102,7 @@ def build_relationship_graph(client, report: str) -> dict:
 
     try:
         response = client.messages.create(
-            model=MODEL,
+            model=model_name(),
             max_tokens=GRAPH_MAX_TOKENS,
             system=GRAPH_PROMPT,
             messages=[{"role": "user", "content": report}],

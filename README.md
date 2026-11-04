@@ -45,13 +45,18 @@ python -m streamlit run app_modern.py
 ### .env File
 
 ```env
-# Required for Claude API
-ANTHROPIC_API_KEY=sk-ant-... 
-# OR use MaxPlus (API-compatible with Anthropic)
-ANTHROPIC_API_KEY=ccsk-...
-ANTHROPIC_BASE_URL=https://api.maxplus-ai.cc
+# MaxPlus (แนะนำ)
+MAXPLUS_API_KEY=...
+MAXPLUS_BASE_URL=https://<endpoint>
+MAXPLUS_MODEL=<model>
 
+# หรือ Anthropic
+# ANTHROPIC_API_KEY=sk-ant-...
+# ANTHROPIC_BASE_URL=
+# ANTHROPIC_MODEL=
 ```
+
+`MAXPLUS_*` มีลำดับความสำคัญเหนือ `ANTHROPIC_*` และตั้งค่าได้จากหน้า Settings ใน UI
 
 **API Keys are optional** — the app will use defaults from `.env` if not provided via UI.
 

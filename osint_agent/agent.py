@@ -13,7 +13,20 @@ from anthropic import Anthropic
 from .system_prompt import SYSTEM_PROMPT
 from .tools import build_tool_list, execute_tool
 
-MODEL = "claude-sonnet-5"
+DEFAULT_MODEL = "claude-sonnet-5"
+MODEL = DEFAULT_MODEL
+
+
+def model_name() -> str:
+    """โมเดลที่ใช้จริง — รองรับ MaxPlus/Anthropic override"""
+    config = read_config()
+    return (
+        config.get("MAXPLUS_MODEL")
+        or config.get("ANTHROPIC_MODEL")
+        or os.environ.get("MAXPLUS_MODEL")
+        or os.environ.get("ANTHROPIC_MODEL")
+        or DEFAULT_MODEL
+    )
 MAX_STEPS = 16
 MAX_WEB_SEARCHES = 10
 STEP_MAX_TOKENS = 4096
@@ -46,10 +59,21 @@ def _build_client(api_key_override: str = None) -> Anthropic:
     # 1. override จาก frontend (ถ้ามี)
     # 2. จาก .env หรือ environment
     # 3. ถ้าไม่มี ไม่ต้อง raise error ให้ใช้ default
-    api_key = api_key_override or config.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+    api_key = (
+        api_key_override
+        or config.get("MAXPLUS_API_KEY")
+        or config.get("ANTHROPIC_API_KEY")
+        or os.environ.get("MAXPLUS_API_KEY")
+        or os.environ.get("ANTHROPIC_API_KEY")
+    )
 
     # ถ้าไม่มี API key และไม่มี base_url ที่อนุญาต ให้ raise error
-    base_url = config.get("ANTHROPIC_BASE_URL") or os.environ.get("ANTHROPIC_BASE_URL")
+    base_url = (
+        config.get("MAXPLUS_BASE_URL")
+        or config.get("ANTHROPIC_BASE_URL")
+        or os.environ.get("MAXPLUS_BASE_URL")
+        or os.environ.get("ANTHROPIC_BASE_URL")
+    )
 
     # If MaxPlus base_url is set, it's optional to have API key (MaxPlus might use auth headers)
     # But for standard Anthropic, we need the key
@@ -58,9 +82,6 @@ def _build_client(api_key_override: str = None) -> Anthropic:
             "ไม่พบ ANTHROPIC_API_KEY (ทั้งใน .env และตัวแปรแวดล้อม) กรุณาตั้งค่าก่อนใช้งาน"
         )
 
-    # ใช้ placeholder key ถ้า base_url เป็น MaxPlus แต่ไม่มี explicit key
-    if not api_key and base_url and "maxplus" in base_url.lower():
-        api_key = "placeholder-key"  # MaxPlus ไม่จำเป็นต้องใช้ key ถ้ากำหนด base_url
 
     if base_url:
         return Anthropic(api_key=api_key or "sk-placeholder", base_url=base_url)
@@ -177,7 +198,7 @@ def run_osint_lookup(
         emit({"kind": "step", "text": f"รอบคิดที่ {step}"})
 
         response = client.messages.create(
-            model=MODEL,
+            model=model_name(),
             max_tokens=STEP_MAX_TOKENS,
             system=system,
             messages=messages,
@@ -226,7 +247,7 @@ def run_osint_lookup(
     )
 
     final_response = client.messages.create(
-        model=MODEL,
+        model=model_name(),
         max_tokens=REPORT_MAX_TOKENS,
         system=system,
         messages=messages,

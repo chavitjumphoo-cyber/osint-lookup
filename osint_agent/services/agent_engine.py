@@ -25,7 +25,12 @@ def available() -> bool:
         from osint_agent.agent import read_config
 
         config = read_config()
-        return bool(config.get("ANTHROPIC_API_KEY") or config.get("ANTHROPIC_BASE_URL"))
+        return bool(
+            config.get("MAXPLUS_API_KEY")
+            or config.get("MAXPLUS_BASE_URL")
+            or config.get("ANTHROPIC_API_KEY")
+            or config.get("ANTHROPIC_BASE_URL")
+        )
     except Exception:  # noqa: BLE001
         return False
 
@@ -49,7 +54,7 @@ class AgentEngine:
         return text if len(text) <= MAX_RESULT_CHARS else text[:MAX_RESULT_CHARS] + "…"
 
     def run(self, run: dict, state: AgentState, budget: budget_mod.RunBudget) -> dict:
-        from ..agent import MODEL, STEP_MAX_TOKENS
+        from ..agent import STEP_MAX_TOKENS, model_name
 
         client = self._client()
         self.state = state
@@ -60,7 +65,7 @@ class AgentEngine:
             state.steps += 1
             budget.step()
             response = client.messages.create(
-                model=MODEL,
+                model=model_name(),
                 max_tokens=STEP_MAX_TOKENS,
                 system=agent_prompts.AGENT_SYSTEM,
                 messages=messages,
