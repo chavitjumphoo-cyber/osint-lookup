@@ -620,6 +620,15 @@ if submitted:
             st.caption("username ซ้ำอย่างเดียวไม่ยืนยันว่าเป็นคนเดียวกัน")
 
         with tab_ids:
+            if analysis["names"]:
+                st.markdown("**ชื่อที่พบ**")
+                for index, name in enumerate(analysis["names"]):
+                    st.markdown(
+                        f"- {name['full_name']} (ชื่อ: {name['given_name']}, นามสกุล: {name['family_name']}) "
+                        f"· {name['confidence']} · [source]({name['source_url']})"
+                    )
+                    if name.get("family_name"):
+                        pivot_button(name["family_name"], "family_name", f"fam-{index}")
             if not analysis["identifiers"]:
                 st.info("ยังไม่พบตัวระบุ")
             for index, item in enumerate(analysis["identifiers"][:60]):
@@ -660,8 +669,18 @@ if submitted:
                     st.code(str(item["metrics"]))
 
         with tab_rel:
-            if not analysis["relationships"]:
+            if analysis["explicit_relations"]:
+                st.markdown("**ความสัมพันธ์ที่แหล่งระบุ**")
+                for rel in analysis["explicit_relations"]:
+                    st.markdown(
+                        f"- **{rel.get('relationship')}**: {rel.get('name')} — {rel.get('snippet', '')[:160]}"
+                    )
+                    if rel.get("source_url"):
+                        st.markdown(f"  [source]({rel['source_url']})")
+            if not analysis["relationships"] and not analysis["explicit_relations"]:
                 st.info("ยังไม่พบความสัมพันธ์ที่มีหลักฐาน")
+            if analysis["relationships"]:
+                st.caption("สัญญาณเชื่อมโยงจาก co-occurrence (ยังไม่ใช่คำระบุความสัมพันธ์)")
             for rel in analysis["relationships"]:
                 st.markdown(f"- {rel['name']} ↔ {rel['handle']} (พบร่วม {rel['strength']})")
 

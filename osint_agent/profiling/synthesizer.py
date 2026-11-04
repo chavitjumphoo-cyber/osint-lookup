@@ -72,6 +72,7 @@ def synthesize(
     interests = sorted({entity["value"] for entity in entities if entity["type"] == "interest"})
     emails = sorted({value for profile in profiles for value in profile["emails"]})
     phones = sorted({value for profile in profiles for value in profile["phones"]})
+    family_names = sorted({value for profile in profiles for value in profile.get("family_names", [])})
 
     lines_profiles = [{"platform": p["platform"], "username": p["username"], "url": p["url"],
                        "confidence": p["confidence"], "evidence": p["evidence"]} for p in profiles]
@@ -93,6 +94,8 @@ def synthesize(
         summary.append(f"พื้นที่/สถานที่ซึ่งพบ: {', '.join(locations[:5])}")
     if not summary:
         summary.append("ยังไม่พบข้อมูลโปรไฟล์ที่ยืนยันได้จากแหล่งสาธารณะ")
+    if family_names:
+        summary.append("นามสกุลที่พบ (ใช้เป็น pivot ไม่ใช่หลักฐานครอบครัว): " + ", ".join(family_names[:5]))
     summary.append("แยกได้เป็น: ยืนยันได้ / เป็นไปได้ / ขัดแย้ง / ยังตอบไม่ได้ (ดูหัวข้อ 11 และ 15)")
 
     return {
@@ -103,6 +106,7 @@ def synthesize(
             "emails": emails,
             "phones": phones,
             "organizations": orgs,
+            "family_names": family_names,
         },
         "profiles": lines_profiles,
         "associates": relationships,
@@ -146,7 +150,7 @@ def render_markdown(data: dict, run: dict) -> str:
         out.extend(items or ["- ไม่พบข้อมูล"])
         out.append("")
 
-    section("1. บทสรุปผู้บริหาร", [f"- {line}" for line in data["executive_summary"]])
+    section("1. บุคคลนี้คือใคร (บทสรุปผู้บริหาร)", [f"- {line}" for line in data["executive_summary"]])
 
     identity = data["identity"]
     section(
@@ -157,6 +161,7 @@ def render_markdown(data: dict, run: dict) -> str:
             "อีเมล": identity["emails"],
             "เบอร์": identity["phones"],
             "องค์กร": identity["organizations"],
+            "นามสกุลที่พบ": identity.get("family_names", []),
         }.items() if values],
     )
 
@@ -169,9 +174,15 @@ def render_markdown(data: dict, run: dict) -> str:
         out.append("- ไม่พบโปรไฟล์")
     out.append("")
 
-    section("4. Associates & Relationships", [
-        f"- {item['name']} ↔ {item['handle']} (พบร่วม {item['strength']} ครั้ง)" for item in data["associates"]
-    ])
+    relation_lines = []
+    for item in data.get("explicit_relations", []):
+        relation_lines.append(
+            f"- **{item['relationship']}**: {item['name']} — {item.get('snippet', '')[:160]} "
+            f"({item.get('source_url')}, evidence {item.get('artifact_id')})"
+        )
+    for item in data["associates"]:
+        relation_lines.append(f"- สัญญาณเชื่อมโยง (ไม่ใช่คำระบุความสัมพันธ์): {item['name']} ↔ {item['handle']}")
+    section("4. Associates & Relationships", relation_lines)
     section("5. Lifestyle & Interests", [f"- {item}" for item in data["interests"]])
     section("6. Geo-temporal Signals", [f"- {item['date']}: {item['title']}" for item in data["geo_temporal"]["events"]])
     section("7. Technical Profile", [f"- {item}" for item in data["technical_profile"]])

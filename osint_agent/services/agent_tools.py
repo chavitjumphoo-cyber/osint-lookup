@@ -19,6 +19,9 @@ def _schema(name: str, description: str, properties: dict, required: list[str]) 
 
 TOOL_SCHEMAS = [
     _schema("search_web", "ค้นเว็บหลาย engine", {"query": {"type": "string"}}, ["query"]),
+    _schema("search_name", "ค้นชื่อเต็มพร้อม site เฉพาะ", {"name": {"type": "string"}}, ["name"]),
+    _schema("search_surname", "ค้นนามสกุลพร้อมบริบทครอบครัว", {"surname": {"type": "string"}, "context": {"type": "string"}}, ["surname"]),
+    _schema("search_family_relation", "ค้นนามสกุลร่วมกับคำบอกความสัมพันธ์", {"surname": {"type": "string"}, "relation": {"type": "string"}}, ["surname"]),
     _schema("scan_profiles", "ตรวจ username บนแพลตฟอร์มและดึง metadata", {"username": {"type": "string"}}, ["username"]),
     _schema("fetch_profile", "เปิดหน้าโปรไฟล์ด้วย Moli และสกัดโปรไฟล์", {"url": {"type": "string"}}, ["url"]),
     _schema("browser_capture_profile", "เหมือน fetch_profile — จับโปรไฟล์แบบมีหลักฐาน", {"url": {"type": "string"}}, ["url"]),
@@ -60,6 +63,20 @@ def _summarize_artifacts(artifacts) -> dict:
 def execute(name: str, args: dict, ctx) -> dict:
     if name == "search_web":
         return _summarize_artifacts([a for a in collectors.search(args["query"], limit=8) if ctx.state.add_artifact(a)])
+
+    if name in {"search_name", "search_surname", "search_family_relation"}:
+        from ..profiling.thai_identity import surname_queries
+
+        if name == "search_name":
+            queries = [f'"{args["name"]}"', f'"{args["name"]}" site:facebook.com']
+        elif name == "search_surname":
+            queries = surname_queries(args["surname"], [args.get("context", "")])[:3]
+        else:
+            queries = [f'"{args["surname"]}" {args["relation"]}']
+        added = []
+        for query in queries:
+            added += [a for a in collectors.search(query, limit=5) if ctx.state.add_artifact(a)]
+        return {**_summarize_artifacts(added), "queries": queries}
 
     if name == "scan_profiles":
         from ..profiling import collectors as c

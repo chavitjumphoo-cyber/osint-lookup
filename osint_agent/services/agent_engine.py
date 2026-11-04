@@ -112,12 +112,14 @@ class AgentEngine:
     def _finalize(self, run: dict, state: AgentState) -> dict:
         contradictions = synthesizer.contradictions(state.profiles, state.entities)
         rels = relationships.co_occurring_entities(state.artifacts, state.entities)
+        explicit = relationships.explicit_relations(state.profiles)
         events = timeline_mod.build(state.artifacts, state.entities)
         self._candidates(state)
         self._ownership(state)
         data = synthesizer.synthesize(
             run, state.profiles, state.entities, state.artifacts, rels, contradictions, events
         )
+        data["explicit_relations"] = explicit
         data["actions"] = state.actions
         data["limitations"] = [
             "รวบรวมจากข้อมูลสาธารณะเท่านั้น",
@@ -175,4 +177,11 @@ def seed_state(store, run: dict) -> AgentState:
 
 
 def seed_queries(state: AgentState) -> list[str]:
-    return pivots.search_queries(state.target, state.target_type)[:3]
+    queries = pivots.search_queries(state.target, state.target_type)
+    if state.target_type == "name":
+        from ..profiling.thai_identity import parse_name, surname_queries
+
+        parsed = parse_name(state.target)
+        if parsed:
+            queries = [f'"{state.target}"'] + surname_queries(parsed["family_name"])[:3] + queries
+    return list(dict.fromkeys(queries))[:4]

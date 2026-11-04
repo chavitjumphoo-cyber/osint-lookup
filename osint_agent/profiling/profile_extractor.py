@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import re
 
-from . import entity_extractor
+from . import entity_extractor, thai_identity
 
 FIELDS = (
     "display_names", "aliases", "usernames", "bio", "locations", "organizations",
     "education", "websites", "emails", "phones", "avatar_urls", "account_created_at",
     "followers", "following", "repositories", "posts", "languages", "interests",
-    "published_dates", "relations",
+    "published_dates", "relations", "name_observations",
 )
 
 ORG_RE = re.compile(r"(?:works? at|working at|employed at|@)\s+([A-Z][\w&.\- ]{2,40})")
@@ -48,6 +48,17 @@ def extract(artifact: dict) -> dict:
 
     if title:
         _add(fields, "display_names", title, artifact, "Probable")
+        parsed = thai_identity.parse_name(title)
+        if parsed:
+            fields["name_observations"].append(
+                {
+                    **parsed,
+                    "source_artifact": artifact["artifact_id"],
+                    "source_url": artifact.get("source_url", ""),
+                    "snippet": content[:200],
+                    "confidence": "Probable",
+                }
+            )
     if artifact.get("author"):
         _add(fields, "usernames", artifact["author"], artifact, "Probable")
     if meta.get("bio"):
@@ -84,6 +95,19 @@ def extract(artifact: dict) -> dict:
         _add(fields, "followers", follow.group(1), artifact, "Unverified")
     for match in LANG_RE.finditer(content):
         _add(fields, "languages", match.group(1).lower(), artifact, "Unverified")
+
+    for relation in thai_identity.extract_relations(content):
+        fields["relations"].append(
+            {
+                "name": relation["name"],
+                "relationship": relation["relationship"],
+                "term": relation["term"],
+                "snippet": relation["snippet"],
+                "source_artifact": artifact["artifact_id"],
+                "source_url": artifact.get("source_url", ""),
+                "confidence": "Unverified",
+            }
+        )
 
     return {"artifact_id": artifact["artifact_id"], **fields}
 

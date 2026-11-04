@@ -81,6 +81,9 @@ def resolve_profiles(artifacts: list[dict], entities: list[dict]) -> list[dict]:
                 "education": [],
                 "languages": [],
                 "explicit_links": [],
+                "name_observations": [],
+                "relations": [],
+                "family_names": [],
                 "dates": [],
                 "evidence": [],
                 "confidence": "Unverified",
@@ -107,6 +110,15 @@ def resolve_profiles(artifacts: list[dict], entities: list[dict]) -> list[dict]:
             value = entry.get("value") if isinstance(entry, dict) else entry
             if value and value not in profile["links"]:
                 profile["links"].append(value)
+        for observation in (metadata.get("profile_fields") or {}).get("name_observations", []):
+            if observation not in profile["name_observations"]:
+                profile["name_observations"].append(observation)
+            family = observation.get("family_name") if isinstance(observation, dict) else None
+            if family and family not in profile["family_names"]:
+                profile["family_names"].append(family)
+        for relation in (metadata.get("profile_fields") or {}).get("relations", []):
+            if relation not in profile["relations"]:
+                profile["relations"].append(relation)
         content = artifact.get("content", "")
         if content and len(content) > 15:
             if not any(content[:80] in existing for existing in profile["bios"]):

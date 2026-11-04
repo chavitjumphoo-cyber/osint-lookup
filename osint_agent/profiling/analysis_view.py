@@ -13,6 +13,7 @@ PIVOT_TOOLS = {
     "url": ["fetch_page"],
     "name": ["web_search"],
     "organization": ["web_search"],
+    "family_name": ["search_surname", "search_family_relation"],
 }
 
 
@@ -107,6 +108,16 @@ def build(store, run_id: str) -> dict:
         "relationships": rels,
         "timeline": events,
         "candidates": store.list_candidates(run_id),
+        "names": [
+            {"full_name": o.get("full_name"), "given_name": o.get("given_name"),
+             "family_name": o.get("family_name"), "confidence": o.get("confidence"),
+             "source_url": o.get("source_url"), "artifact_id": o.get("source_artifact")}
+            for p in profiles for o in p.get("name_observations", [])
+        ],
+        "family_names": sorted({f for p in profiles for f in p.get("family_names", [])}),
+        "explicit_relations": [
+            r for p in profiles for r in p.get("relations", [])
+        ],
         "counts": {
             "identifiers": len(identifiers),
             "profiles": len(profiles),

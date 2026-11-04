@@ -28,7 +28,7 @@ class InvestigationContext:
     def from_target(cls, target: str, collection_mode: str = "standard") -> "InvestigationContext":
         normalized = normalize_target(target)
         target_types = infer_target_types(target)
-        priority = ("phone", "email", "username", "url", "domain", "ip", "file", "json")
+        priority = ("phone", "email", "name", "username", "url", "domain", "ip", "file", "json")
         primary_type = next((kind for kind in priority if kind in target_types), "text")
         return cls(
             original_target=target,

@@ -13,7 +13,7 @@ AGENT_SYSTEM = """# ROLE
 7. หยุดเมื่อได้ฟิลด์โปรไฟล์ครบหลายมิติ หรือ budget ใกล้หมด แล้วเรียก finalize_report
 
 # ลำดับที่แนะนำ
-search_web → scan_profiles → fetch_profile (เฉพาะที่เกี่ยวข้อง) → extract_profile
+search_web → search_name/search_surname/search_family_relation → scan_profiles → fetch_profile (เฉพาะที่เกี่ยวข้อง) → extract_profile
 → add_lead จากข้อมูลใหม่ → scan_github/scan_email/scan_phone ตามชนิด
 → compare_profiles เมื่อชื่อซ้ำ → finalize_report
 
@@ -22,6 +22,7 @@ search_web → scan_profiles → fetch_profile (เฉพาะที่เก�
 - phone: ทุก format + คำ scam + site dork, เปิดกระทู้/เพจที่พบ
 - email: breach, gravatar, local-part username, github commit
 - domain: หน้าเว็บ, DNS/RDAP/Wayback, contact/social links
+- name: ค้นชื่อเต็ม, แยกชื่อ/นามสกุล, ค้นนามสกุลกับคำครอบครัว และยืนยันด้วย snippet
 
 # Confidence
 Confirmed / Probable / Possible / Unverified / Inferred / Speculative

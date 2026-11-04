@@ -239,6 +239,7 @@ class Orchestrator:
             # 6) specialists
             contradictions = synthesizer.contradictions(profiles, entities)
             rels = relationships.co_occurring_entities(corpus.artifacts(), entities)
+            explicit = relationships.explicit_relations(profiles)
             events = timeline_mod.build(corpus.artifacts(), entities)
             self._identity_candidates(run_id, profiles)
             self._finding(run_id, "contradiction", "\n".join(
@@ -247,6 +248,7 @@ class Orchestrator:
 
             # 7) synthesize
             data = synthesizer.synthesize(run, profiles, entities, corpus.artifacts(), rels, contradictions, events)
+            data["explicit_relations"] = explicit
             data["limitations"] = [
                 "รวบรวมจากข้อมูลสาธารณะเท่านั้น",
                 "การไม่พบข้อมูลไม่ยืนยันว่าปลอดภัย",

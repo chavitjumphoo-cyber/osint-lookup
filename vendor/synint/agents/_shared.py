@@ -106,8 +106,17 @@ def infer_target_types(target: Any) -> set[str]:
     if is_phone(target_str):
         types.add("phone")
 
+    if " " in target_str and not (types & {"email", "domain", "url", "ip"}):
+        try:
+            from osint_agent.profiling.thai_identity import parse_name
+
+            if parse_name(target_str):
+                types.add("name")
+        except Exception:  # noqa: BLE001
+            pass
+
     if USERNAME_TARGET_RE.match(target_str) and not (
-        types & {"email", "domain", "phone", "url", "ip"}
+        types & {"email", "domain", "phone", "url", "ip", "name"}
     ):
         types.add("username")
 

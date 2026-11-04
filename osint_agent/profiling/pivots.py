@@ -62,6 +62,17 @@ def search_queries(target: str, target_type: str, known_names: list[str] | None 
         for term in ("phishing", "มิจฉาชีพ", "scam", "review"):
             queries.append(f'"{host}" {term}')
 
+    elif target_type == "name":
+        from .thai_identity import parse_name, surname_queries
+
+        parsed = parse_name(target)
+        queries.append(f'"{target}"')
+        for site in PLATFORM_SITES[:3]:
+            queries.append(f'"{target}" site:{site}')
+        if parsed:
+            queries.append(f'"{parsed["given_name"]}" "{parsed["family_name"]}"')
+            queries.extend(surname_queries(parsed["family_name"])[:5])
+
     else:
         queries.append(f'"{target}"')
         if " " in target:

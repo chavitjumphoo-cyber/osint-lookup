@@ -36,3 +36,28 @@ def repeated_platforms(artifacts: list[dict]) -> list[dict]:
         {"platform": platform, "count": count, "urls": urls[platform][:5]}
         for platform, count in counts.most_common()
     ]
+
+
+def explicit_relations(profiles: list[dict]) -> list[dict]:
+    """ความสัมพันธ์ที่แหล่งระบุตรง ๆ พร้อมหลักฐาน"""
+    found = []
+    seen = set()
+    for profile in profiles:
+        for relation in profile.get("relations", []):
+            key = (relation.get("name", "").lower(), relation.get("relationship"))
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(
+                {
+                    "name": relation.get("name"),
+                    "relationship": relation.get("relationship"),
+                    "term": relation.get("term"),
+                    "snippet": relation.get("snippet"),
+                    "source_url": relation.get("source_url"),
+                    "artifact_id": relation.get("source_artifact"),
+                    "confidence": relation.get("confidence", "Unverified"),
+                    "via_profile": profile["key"],
+                }
+            )
+    return found
