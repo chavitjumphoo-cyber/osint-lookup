@@ -126,7 +126,23 @@ def build(data: dict, artifacts: list[dict]) -> dict:
         f"{c['kind']} `{c['value']}`: {', '.join(c['detail'])}" for c in data.get("contradictions", [])[:5]
     ]
 
+    confirmed = [
+        f"{p['platform']}: {', '.join(p['display_names'][:1])}" for p in profiles
+        if p.get("confidence") == "Confirmed"
+    ][:5]
+    probable = [
+        f"{p['platform']}:{p.get('username')}" for p in profiles if p.get("confidence") == "Probable"
+    ][:5]
+    brief = {
+        "confirmed": confirmed,
+        "probable": probable,
+        "contradictions": contradictions,
+        "unanswered": data.get("questions_unanswered") or [],
+        "next_pivots": data.get("next_pivots") or [],
+    }
+
     claims = {
+        "exec_brief": brief,
         "identity_answer": {"narrative": opening, "confidence": confidence, "evidence": _ids(profiles)[:6]},
         "digital_identity": {"narrative": digital, "evidence": _ids(profiles)[:6]},
         "work_education": {"narrative": work, "evidence": _ids(profiles, lambda p: bool(p.get("organizations") or p.get("languages")))[:6]},
@@ -198,6 +214,17 @@ def llm_build(data: dict, artifacts: list[dict]) -> dict:
 
 def render(claims: dict) -> str:
     out = ["## บุคคลนี้น่าจะเป็นใคร", "", claims.get("identity_answer", {}).get("narrative", "ยังไม่สามารถระบุได้"), ""]
+    brief = claims.get("exec_brief") or {}
+    for key, title in (
+        ("confirmed", "ยืนยันได้"),
+        ("probable", "เป็นไปได้"),
+        ("contradictions", "ขัดแย้ง"),
+        ("unanswered", "ยังตอบไม่ได้"),
+        ("next_pivots", "จุดที่ควรค้นต่อ"),
+    ):
+        if brief.get(key):
+            out += [f"**{title}**"] + [f"- {item}" for item in brief[key][:6]] + [""]
+    out += ["---", ""] if brief else []
     for key, title in (
         ("digital_identity", "อัตลักษณ์ดิจิทัล"),
         ("work_education", "อาชีพ/การศึกษา/องค์กร"),

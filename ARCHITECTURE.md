@@ -53,6 +53,11 @@ standard/deep + มี API key → `services/agent_engine.py`:
 LLM เลือก action → `agent_tools` → evidence core → artifact → profile extractor → leads
 ทุก action บันทึก reason/result; ไม่มี key → deterministic fallback
 
+## Investigation state + critic
+
+`agent_state` เก็บคำถามที่ต้องตอบ, coverage, leads ที่จัดอันดับด้วย information gain
+และ critic ตรวจว่าทุก action ได้ข้อมูลใหม่หรือไม่ ก่อน gate อนุญาตให้ finalize
+
 ## Profiling corpus
 
 `profiling/` เก็บ artifact ทุกชิ้นพร้อม source_url, source_type, output_hash และ confidence

@@ -26,6 +26,7 @@ TOOL_SCHEMAS = [
     _schema("fetch_profile", "เปิดหน้าโปรไฟล์ด้วย Moli และสกัดโปรไฟล์", {"url": {"type": "string"}}, ["url"]),
     _schema("browser_capture_profile", "เหมือน fetch_profile — จับโปรไฟล์แบบมีหลักฐาน", {"url": {"type": "string"}}, ["url"]),
     _schema("browser_observe", "เปิดหน้าและสรุปหัวข้อ/ลิงก์ที่พบ", {"url": {"type": "string"}}, ["url"]),
+    _schema("browser_capture_post", "เปิดโพสต์และสกัดผู้เขียน วันที่ ชื่อ/องค์กร/ความสัมพันธ์", {"url": {"type": "string"}}, ["url"]),
     _schema("browser_follow_links", "เปิดหน้าและคืนลิงก์ที่ควรตามต่อ", {"url": {"type": "string"}, "max_links": {"type": "integer"}}, ["url"]),
     _schema("fetch_page", "เปิดหน้าเว็บทั่วไปและสกัด entity", {"url": {"type": "string"}}, ["url"]),
     _schema("extract_profile", "สกัดโปรไฟล์จาก artifact ที่มีอยู่", {"artifact_id": {"type": "string"}}, ["artifact_id"]),
@@ -85,11 +86,15 @@ def execute(name: str, args: dict, ctx) -> dict:
         probed = [a for a in c.probe_platforms(args["username"]) if ctx.state.add_artifact(a)]
         return {**_summarize_artifacts(found), "probed": len(probed), "probe_urls": [a.source_url for a in probed[:8]]}
 
-    if name in {"fetch_profile", "fetch_page", "browser_capture_profile", "browser_observe", "browser_follow_links"}:
+    if name in {"fetch_profile", "fetch_page", "browser_capture_profile", "browser_observe", "browser_follow_links", "browser_capture_post"}:
         artifact = collectors.fetch(args["url"])
         ctx.state.fetches += 1
         fields = {}
-        if artifact.status == "ok" and artifact.source_type == "profile" and artifact.content:
+        if artifact.status == "ok" and artifact.content and (
+            artifact.source_type == "profile" or name == "browser_capture_post"
+        ):
+            if name == "browser_capture_post":
+                artifact.source_type = "post"
             fields = profile_extractor.extract(artifact.to_dict())
             artifact.metadata["profile_fields"] = fields
         added = ctx.state.add_artifact(artifact)

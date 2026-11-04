@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..profiling import profile_resolver
+from . import information_gain, question_manager
 
 
 @dataclass
@@ -46,12 +47,20 @@ class AgentState:
     max_fetches: int = 20
     store: object | None = None
     coverage: Coverage = field(default_factory=Coverage)
-    questions: list[str] = field(default_factory=list)
+    questions: list[dict] = field(default_factory=list)
 
     def refresh(self) -> None:
         self.entities = profile_resolver.extract_entities(self.artifacts)
         self.profiles = profile_resolver.resolve_profiles(self.artifacts, self.entities)
         self.coverage.identifiers_extracted = len(self.entities)
+        if self.entities:
+            question_manager.answer(self.questions, "ตัวระบุ", [e["source_artifact"] for e in self.entities[:5]], partial=True)
+        if any(p.get("display_names") for p in self.profiles):
+            question_manager.answer(self.questions, "ชื่อที่ปรากฏ", self._name_evidence())
+        if any(p.get("locations") for p in self.profiles):
+            question_manager.answer(self.questions, "พื้นที่สาธารณะ", self._flat("locations"))
+        if any(p.get("emails") or p.get("phones") for p in self.profiles):
+            question_manager.answer(self.questions, "อีเมล", self._flat("emails") + self._flat("phones"))
         seen = {f"{lead['type']}:{lead['value'].lower()}" for lead in self.leads}
         for profile in self.profiles:
             for handle in profile.get("handles", []):
@@ -74,6 +83,12 @@ class AgentState:
                 if key not in seen:
                     self.leads.append({"type": "family_name", "value": family, "reason": "นามสกุลที่พบ"})
                     seen.add(key)
+
+    def _flat(self, field: str) -> list[str]:
+        return [eid for p in self.profiles for eid in p.get("evidence", []) if p.get(field)][:5]
+
+    def _name_evidence(self) -> list[str]:
+        return [eid for p in self.profiles if p.get("display_names") for eid in p.get("evidence", [])][:5]
 
     def add_artifact(self, artifact) -> bool:
         if any(item["artifact_id"] == artifact.artifact_id for item in self.artifacts):
@@ -147,9 +162,12 @@ class AgentState:
                 }
                 for p in self.profiles[:limit]
             ],
-            "leads": self.leads[:12],
+            "leads": information_gain.rank(self.leads[:24], {a.get("source_url", "") for a in self.artifacts})[:12],
             "important_artifacts": self._important(),
-            "questions": self.questions,
+            "questions": {
+                "coverage": question_manager.coverage(self.questions),
+                "unanswered": question_manager.remaining(self.questions)[:8],
+            },
             "recent_actions": self.actions[-6:],
         }
 
@@ -179,4 +197,7 @@ class AgentState:
             for key, value in minimum.items()
             if getattr(self.coverage, key) < value
         ]
+        unanswered = question_manager.remaining(self.questions)
+        if len(unanswered) > 3:
+            missing.append(f"ยังตอบคำถามไม่ได้ {len(unanswered)} ข้อ")
         return not missing, missing

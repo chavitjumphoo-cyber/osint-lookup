@@ -7,7 +7,7 @@ import os
 
 from ..profiling import pivots, profile_resolver, relationships, synthesizer
 from ..profiling import timeline as timeline_mod
-from . import agent_prompts, agent_tools
+from . import agent_prompts, agent_tools, information_gain, question_manager
 from . import budget as budget_mod
 from .agent_state import AgentState
 
@@ -105,6 +105,7 @@ class AgentEngine:
                             {"type": "tool_result", "tool_use_id": block.id, "content": [{"type": "text", "text": self._trim(payload)}]}
                         )
                         continue
+                before_count = len(state.artifacts)
                 try:
                     payload = agent_tools.execute(name, args, self)
                 except Exception as exc:  # noqa: BLE001
@@ -117,7 +118,9 @@ class AgentEngine:
                     state.coverage.cross_checks += 1
                 if name in {"analysis_contradictions", "verify_identity_candidate"}:
                     state.coverage.contradictions_checked = True
-                state.log_action(name, args.get("url") or args.get("query") or args.get("value") or "", args.get("reason", ""), name, before, self._trim(payload))
+                gained = len(state.artifacts) - before_count
+                critic = "ได้ข้อมูลใหม่" if gained else "ไม่มีข้อมูลใหม่"
+                state.log_action(name, args.get("url") or args.get("query") or args.get("value") or "", args.get("reason", ""), name, before, f"{critic}: {self._trim(payload)}")
                 self.store.add_finding(run["id"], f"agent:{name}", self._trim(payload), "ok", "")
                 results.append(
                     {
@@ -146,6 +149,10 @@ class AgentEngine:
             run, state.profiles, state.entities, state.artifacts, rels, contradictions, events
         )
         data["explicit_relations"] = explicit
+        data["questions_unanswered"] = question_manager.remaining(state.questions)
+        data["next_pivots"] = [
+            lead["value"] for lead in information_gain.rank(state.leads, set())[:6]
+        ]
         data["actions"] = state.actions
         data["limitations"] = [
             "รวบรวมจากข้อมูลสาธารณะเท่านั้น",
@@ -199,6 +206,7 @@ def seed_state(store, run: dict) -> AgentState:
     )
     existing = store.list_artifacts(run["id"])
     state.artifacts = existing
+    state.questions = question_manager.for_target(run["target_type"])
     state.refresh()
     return state
 
