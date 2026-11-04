@@ -112,9 +112,10 @@ def fetch(url: str) -> Artifact:
 
         title = meta("og:title")
         bio = meta("og:description") or meta("description")
-        content = "\n".join(part for part in (title, bio) if part)
+        body = clean(soup.get_text("\n", strip=True))[:4000]
+        content = "\n".join(part for part in (title, bio, body) if part)
         return _artifact(
-            url, "profile", "moli_fetch", content or clean(soup.get_text(" ", strip=True))[:1500],
+            url, "profile", "moli_fetch", content[:5000],
             platform=platform, title=title, confidence="Probable",
             metadata={"avatar": meta("og:image"), "bio": bio},
         )

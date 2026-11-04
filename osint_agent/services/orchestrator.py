@@ -254,6 +254,7 @@ class Orchestrator:
                 "การไม่พบข้อมูลไม่ยืนยันว่าปลอดภัย",
                 f"เปิดอ่านได้ {sum(1 for a in corpus.artifacts() if a['source_type'] != 'search_result')} หน้า",
             ]
+            data["_artifacts_full"] = corpus.artifacts()
             data["_artifacts"] = [
                 {key: a.get(key) for key in ("artifact_id", "source_tool", "status", "source_url")}
                 for a in corpus.artifacts()
@@ -360,6 +361,7 @@ class Orchestrator:
             profiles = profile_resolver.resolve_profiles(corpus.artifacts(), entities)
             data = synthesizer.synthesize(run, profiles, entities, corpus.artifacts(), [], [], [])
             data["limitations"] = ["งานหยุดก่อนกำหนด — รายงานไม่สมบูรณ์"]
+            data["_artifacts_full"] = corpus.artifacts()
             data["_artifacts"] = [
                 {key: a.get(key) for key in ("artifact_id", "source_tool", "status", "source_url")}
                 for a in corpus.artifacts()

@@ -22,10 +22,15 @@ def _ids(profiles: list[dict], predicate=None) -> list[str]:
 
 
 def _name(profiles: list[dict]) -> str | None:
+    from collections import Counter
+
+    counts = Counter()
     for profile in profiles:
-        if profile.get("display_names"):
-            return profile["display_names"][0]
-    return None
+        for name in profile.get("display_names", []):
+            words = name.split()
+            if 2 <= len(words) <= 3 and len(name) < 60:
+                counts[name] += 1
+    return counts.most_common(1)[0][0] if counts else None
 
 
 def _best(profiles: list[dict]) -> str:
@@ -40,7 +45,7 @@ def build(data: dict, artifacts: list[dict]) -> dict:
     family = identity.get("family_names") or []
     explicit = data.get("explicit_relations") or []
     valid = {a["artifact_id"] for a in artifacts}
-    name = (identity.get("names") or [None])[0]
+    name = _name(profiles) or (identity.get("names") or [None])[0]
     confidence = _best(profiles)
     platforms = sorted({p["platform"] for p in profiles if p.get("evidence")})
     usernames = sorted({p["username"] for p in profiles if p.get("username")})[:4]

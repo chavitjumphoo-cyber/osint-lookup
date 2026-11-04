@@ -270,6 +270,7 @@ def llm_synthesize(data: dict, run: dict) -> dict:
         parsed = json.loads(match.group(0))
         merged = {**data, **{key: value for key, value in parsed.items() if key in data}}
         merged["findings"] = _validate_findings(merged.get("findings") or [], data)
+        merged["narrative"] = narrative.llm_build(merged, data.get("_artifacts_full") or [])
         return merged
     except Exception:  # noqa: BLE001
         return data

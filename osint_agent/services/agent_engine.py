@@ -60,6 +60,8 @@ class AgentEngine:
         self.state = state
         messages = [{"role": "user", "content": agent_prompts.state_message(state.snapshot())}]
         finalize = False
+        forced = False
+        gate_attempts = 0
 
         while not finalize and not state.exhausted():
             state.steps += 1
@@ -75,6 +77,13 @@ class AgentEngine:
 
             tool_blocks = [b for b in response.content if getattr(b, "type", None) == "tool_use"]
             if not tool_blocks:
+                if not state.exhausted():
+                    gate_ok, missing = state.ready_to_finalize(run["profile"])
+                    if not gate_ok:
+                        messages.append(
+                            {"role": "user", "content": "ข้อมูลยังไม่พอ: " + ", ".join(missing) + " — เรียก tool ต่อ"}
+                        )
+                        continue
                 break
 
             results = []
@@ -83,14 +92,31 @@ class AgentEngine:
                 args = block.input or {}
                 before = [a["artifact_id"] for a in state.artifacts[-3:]]
                 self.emit({"kind": "agent_action", "text": f"{name} {json.dumps(args, ensure_ascii=False)[:160]}"})
+                gate_ok, missing = state.ready_to_finalize(run["profile"])
                 if name == "finalize_report":
-                    finalize = True
+                    gate_attempts += 1
+                    if gate_ok or state.exhausted() or forced or gate_attempts >= 3:
+                        finalize = True
+                    else:
+                        payload = {"gate": "ยังไม่พร้อม", "missing": missing, "hint": "เก็บข้อมูลเพิ่มก่อน finalize_report"}
+                        self.emit({"kind": "gate", "text": "ต้องเก็บเพิ่ม: " + ", ".join(missing)})
+                        state.log_action(name, "", "quality gate", "coverage", [], str(payload))
+                        results.append(
+                            {"type": "tool_result", "tool_use_id": block.id, "content": [{"type": "text", "text": self._trim(payload)}]}
+                        )
+                        continue
                 try:
                     payload = agent_tools.execute(name, args, self)
                 except Exception as exc:  # noqa: BLE001
                     payload = {"error": f"{type(exc).__name__}: {exc}"}
-                if name in {"fetch_profile", "fetch_page", "search_web"}:
+                if name in {"fetch_profile", "fetch_page", "search_web", "search_name", "search_surname", "search_family_relation", "scan_profiles"}:
                     budget.tool_call()
+                if name.startswith("search"):
+                    state.coverage.search_queries += 1
+                if name == "compare_profiles":
+                    state.coverage.cross_checks += 1
+                if name in {"analysis_contradictions", "verify_identity_candidate"}:
+                    state.coverage.contradictions_checked = True
                 state.log_action(name, args.get("url") or args.get("query") or args.get("value") or "", args.get("reason", ""), name, before, self._trim(payload))
                 self.store.add_finding(run["id"], f"agent:{name}", self._trim(payload), "ok", "")
                 results.append(
@@ -100,11 +126,11 @@ class AgentEngine:
                         "content": [{"type": "text", "text": self._trim(payload)}],
                     }
                 )
-                if name == "finalize_report":
+                if name == "finalize_report" and finalize:
                     break
 
             messages.append({"role": "user", "content": results})
-            messages = messages[-14:]
+            messages = messages[-24:]
             messages[0] = {"role": "user", "content": agent_prompts.state_message(state.snapshot())}
 
         return self._finalize(run, state)
@@ -126,6 +152,7 @@ class AgentEngine:
             "การไม่พบข้อมูลไม่ยืนยันว่าปลอดภัย",
             f"agent ใช้ {state.steps} ขั้น เปิดอ่าน {state.fetches} หน้า",
         ]
+        data["_artifacts_full"] = state.artifacts
         data["_artifacts"] = [
             {k: a.get(k) for k in ("artifact_id", "source_tool", "status", "source_url")}
             for a in state.artifacts

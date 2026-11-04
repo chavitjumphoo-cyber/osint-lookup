@@ -12,6 +12,14 @@ AGENT_SYSTEM = """# ROLE
 6. เก็บให้มากกว่าเดิม: เปิดโปรไฟล์ที่พบ, สกัด metadata, ตาม handle/name/website ใหม่
 7. หยุดเมื่อได้ฟิลด์โปรไฟล์ครบหลายมิติ หรือ budget ใกล้หมด แล้วเรียก finalize_report
 
+# ก่อน finalize
+ต้องผ่านขั้นต่ำ: ค้นหลายมุม, เปิดอ่านหน้าโปรไฟล์/โพสต์จริง, สกัด identifier ใหม่,
+ตรวจข้ามโปรไฟล์, ดู contradictions และ 6D ถ้า gate ยังไม่ผ่านให้เก็บต่อ
+
+# การอ่านรายละเอียด
+เมื่อเปิดหน้าได้ ให้ถือว่าเนื้อหาในหน้าเป็นหลักฐาน: อ่านชื่อ bio องค์กร การศึกษา
+สถานที่ ลิงก์ และชื่อบุคคลที่กล่าวถึง แล้วสกัดเป็น field/lead ทันที
+
 # ลำดับที่แนะนำ
 search_web → search_name/search_surname/search_family_relation → scan_profiles → fetch_profile (เฉพาะที่เกี่ยวข้อง) → extract_profile
 → add_lead จากข้อมูลใหม่ → scan_github/scan_email/scan_phone ตามชนิด

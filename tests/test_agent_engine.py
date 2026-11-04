@@ -68,8 +68,9 @@ def test_engine_runs_actions_and_finalizes(store, fake_collectors, monkeypatch):
     engine = agent_engine.AgentEngine(store, run_id, client=FakeClient(script))
     data = engine.run(run, state, budget_mod.RunBudget(budget_mod.Budget()))
 
-    assert state.steps == 3
-    assert [a["action"] for a in state.actions] == ["search_web", "fetch_profile", "finalize_report"]
+    assert state.steps >= 3
+    assert [a["action"] for a in state.actions][:2] == ["search_web", "fetch_profile"]
+    assert "finalize_report" in [a["action"] for a in state.actions]
     assert store.get_report(run_id)
     assert data["profiles"]
     assert any(f["tool"].startswith("agent:") for f in store.list_findings(run_id))
