@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..profiling import profile_resolver
+from ..profiling.normalizers import fold_key
 from . import information_gain, question_manager
 
 
@@ -61,25 +62,25 @@ class AgentState:
             question_manager.answer(self.questions, "พื้นที่สาธารณะ", self._flat("locations"))
         if any(p.get("emails") or p.get("phones") for p in self.profiles):
             question_manager.answer(self.questions, "อีเมล", self._flat("emails") + self._flat("phones"))
-        seen = {f"{lead['type']}:{lead['value'].lower()}" for lead in self.leads}
+        seen = {f"{lead['type']}:{fold_key(lead['value'])}" for lead in self.leads}
         for profile in self.profiles:
             for handle in profile.get("handles", []):
-                key = f"username:{handle.lower()}"
+                key = f"username:{fold_key(handle)}"
                 if key not in seen:
                     self.leads.append({"type": "username", "value": handle, "reason": "handle ในโปรไฟล์"})
                     seen.add(key)
             for name in profile.get("display_names", []):
-                key = f"name:{name.lower()}"
+                key = f"name:{fold_key(name)}"
                 if key not in seen:
                     self.leads.append({"type": "name", "value": name, "reason": "ชื่อที่แสดง"})
                     seen.add(key)
             for site in profile.get("links", [])[:2]:
-                key = f"url:{site.lower()}"
+                key = f"url:{fold_key(site)}"
                 if key not in seen:
                     self.leads.append({"type": "url", "value": site, "reason": "ลิงก์ในโปรไฟล์"})
                     seen.add(key)
             for family in profile.get("family_names", []):
-                key = f"family_name:{family.lower()}"
+                key = f"family_name:{fold_key(family)}"
                 if key not in seen:
                     self.leads.append({"type": "family_name", "value": family, "reason": "นามสกุลที่พบ"})
                     seen.add(key)

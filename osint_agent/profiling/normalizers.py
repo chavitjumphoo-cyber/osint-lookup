@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import re
+import unicodedata
 
 
 def clean(text: str) -> str:
@@ -19,3 +20,9 @@ def clean(text: str) -> str:
 def snippet(text: str, limit: int = 300) -> str:
     text = clean(text)
     return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def fold_key(text: str) -> str:
+    """Canonical key for matching; preserves original display values elsewhere."""
+    normalized = unicodedata.normalize("NFKC", text or "")
+    return re.sub(r"\s+", " ", normalized).strip().casefold()

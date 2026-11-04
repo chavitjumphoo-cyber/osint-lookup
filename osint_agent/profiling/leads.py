@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .normalizers import fold_key
+
 
 @dataclass(order=True)
 class Lead:
@@ -26,7 +28,7 @@ class LeadQueue:
         value = value.strip()
         if not value:
             return False
-        key = (lead_type, value.lower())
+        key = (fold_key(lead_type), fold_key(value))
         if key in self._seen:
             return False
         self._seen.add(key)

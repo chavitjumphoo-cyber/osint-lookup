@@ -10,6 +10,7 @@ import os
 import re
 
 from . import cognitive, narrative
+from .normalizers import fold_key
 
 
 def contradictions(profiles: list[dict], entities: list[dict]) -> list[dict]:
@@ -17,11 +18,11 @@ def contradictions(profiles: list[dict], entities: list[dict]) -> list[dict]:
     by_username: dict[str, list[dict]] = {}
     for profile in profiles:
         if profile["username"]:
-            by_username.setdefault(profile["username"].lower(), []).append(profile)
+            by_username.setdefault(fold_key(profile["username"]), []).append(profile)
 
     for username, group in by_username.items():
-        names = {name.lower() for profile in group for name in profile["display_names"]}
-        locations = {loc.lower() for profile in group for loc in profile["locations"]}
+        names = {fold_key(name) for profile in group for name in profile["display_names"]}
+        locations = {fold_key(loc) for profile in group for loc in profile["locations"]}
         if len(names) > 1:
             found.append({"kind": "display_name", "value": username, "detail": sorted(names)})
         if len(locations) > 1:
@@ -29,7 +30,7 @@ def contradictions(profiles: list[dict], entities: list[dict]) -> list[dict]:
 
     multi = {}
     for entity in entities:
-        multi.setdefault(entity["type"], set()).add(entity["value"].lower())
+        multi.setdefault(entity["type"], set()).add(fold_key(entity["value"]))
     for kind, values in multi.items():
         if kind in {"name", "location", "organization"} and len(values) > 3:
             found.append({"kind": f"many_{kind}", "value": "", "detail": sorted(values)[:10]})

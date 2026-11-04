@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections import Counter
 
+from .normalizers import fold_key
+
 
 def co_occurring_entities(artifacts: list[dict], entities: list[dict]) -> list[dict]:
     by_artifact: dict[str, list[dict]] = {}
@@ -44,7 +46,7 @@ def explicit_relations(profiles: list[dict]) -> list[dict]:
     seen = set()
     for profile in profiles:
         for relation in profile.get("relations", []):
-            key = (relation.get("name", "").lower(), relation.get("relationship"))
+            key = (fold_key(relation.get("name", "")), relation.get("relationship"))
             if key in seen:
                 continue
             seen.add(key)

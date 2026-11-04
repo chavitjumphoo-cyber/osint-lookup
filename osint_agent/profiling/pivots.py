@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from .normalizers import fold_key
+
 SCAM_TERMS = ["มิจฉาชีพ", "โกง", "scam", "บัญชีม้า", "ฉ้อโกง"]
 PLATFORM_SITES = ["facebook.com", "pantip.com", "twitter.com", "x.com", "instagram.com", "tiktok.com"]
 
@@ -24,9 +26,16 @@ def phone_variants(number: str) -> list[str]:
 
 
 def username_variants(username: str) -> list[str]:
-    base = username.lstrip("@")
-    variants = {base, base.lower(), base.replace(".", ""), base.replace("_", ""), base.replace("-", "")}
-    return [v for v in variants if v]
+    base = username.strip().lstrip("@")
+    variants = [base, base.casefold(), base.replace(".", ""), base.replace("_", ""), base.replace("-", "")]
+    seen = set()
+    stable = []
+    for variant in variants:
+        key = fold_key(variant)
+        if variant and key not in seen:
+            seen.add(key)
+            stable.append(variant)
+    return stable
 
 
 def search_queries(target: str, target_type: str, known_names: list[str] | None = None) -> list[str]:
@@ -80,15 +89,22 @@ def search_queries(target: str, target_type: str, known_names: list[str] | None 
             queries.append(f'"{parts[0]}" "{parts[-1]}"')
             queries.append(f'"{target}" (facebook OR linkedin OR github)')
         for name in names[:2]:
-            if name.lower() != target.lower():
+            if fold_key(name) != fold_key(target):
                 queries.append(f'"{name}"')
 
-    return list(dict.fromkeys(queries))
+    seen = set()
+    stable = []
+    for query in queries:
+        key = fold_key(query)
+        if key not in seen:
+            seen.add(key)
+            stable.append(query)
+    return stable
 
 
 def classify_url(url: str) -> tuple[str, str]:
     """คืน (source_type, platform) แบบหยาบจาก URL"""
-    low = url.lower()
+    low = url.casefold()
     platforms = {
         "github.com": "github",
         "gitlab.com": "gitlab",

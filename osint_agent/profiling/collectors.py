@@ -64,7 +64,7 @@ def rank_result(artifact: dict) -> float:
         score += 0.5
     if artifact.get("source_type") == "profile":
         score += 0.2
-    text = f"{artifact.get('title', '')} {artifact.get('content', '')}".lower()
+    text = f"{artifact.get('title', '')} {artifact.get('content', '')}".casefold()
     for word in ("about", "bio", "profile", "contact", "resume", "มิจฉาชีพ", "scam", "โกง"):
         if word in text:
             score += 0.05

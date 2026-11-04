@@ -54,7 +54,7 @@ def _extract_names(text: str, limit: int = 6) -> list[str]:
 
 
 def extract(text: str) -> dict:
-    lowered = (text or "").lower()
+    lowered = (text or "").casefold()
     locations = [p for p in THAI_PROVINCES if p in text] + [label for key, label in CITY_WORDS.items() if key in lowered]
     interests = [name for name, words in INTERESTS.items() if any(word in lowered for word in words)]
 
@@ -70,7 +70,7 @@ def extract(text: str) -> dict:
 
     return {
         "names": _extract_names(text),
-        "emails": sorted({m.group(0).lower() for m in EMAIL_RE.finditer(text or "")}),
+        "emails": sorted({m.group(0).casefold() for m in EMAIL_RE.finditer(text or "")}),
         "phones": sorted({re.sub(r"[\s-]", "", m.group(0)) for m in PHONE_RE.finditer(text or "")}),
         "handles": sorted({m.group(0) for m in HANDLE_RE.finditer(text or "")}),
         "urls": sorted({m.group(0) for m in URL_RE.finditer(text or "")}),

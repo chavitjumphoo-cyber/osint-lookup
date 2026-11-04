@@ -9,8 +9,8 @@ TITLES = (
     "mr.", "mrs.", "ms.", "dr.",
 )
 THAI_RE = re.compile(r"^[ก-๙]+$")
-EN_RE = re.compile(r"^[A-Za-z][A-Za-z'\-]+$")
-TOKEN_RE = re.compile(r"[ก-๙]+|[A-Za-z][A-Za-z'\-]+")
+EN_RE = re.compile(r"^[A-Za-z][A-Za-z'\-]+$", re.I)
+TOKEN_RE = re.compile(r"[ก-๙]+|[A-Za-z][A-Za-z'\-]+", re.I)
 
 RELATION_TERMS = {
     "บิดา": ["บิดา", "พ่อ", "คุณพ่อ", "father", "dad"],
@@ -39,9 +39,9 @@ RELATION_PATTERNS = [
 
 
 def _term_to_type(term: str) -> str:
-    lowered = term.lower()
+    lowered = term.casefold()
     for kind, terms in RELATION_TERMS.items():
-        if any(lowered == word.lower() or lowered in word.lower() for word in terms):
+        if any(lowered == word.casefold() or lowered in word.casefold() for word in terms):
             return kind
     return "unknown"
 
@@ -52,7 +52,7 @@ def parse_name(text: str) -> dict | None:
     if not raw or len(raw) > 80:
         return None
     for title in TITLES:
-        if raw.lower().startswith(title.lower()):
+        if raw.casefold().startswith(title.casefold()):
             raw = raw[len(title):].strip()
             break
     tokens = TOKEN_RE.findall(raw)
@@ -93,7 +93,7 @@ def extract_relations(text: str) -> list[dict]:
 def consume_title(name: str) -> str:
     value = name.strip()
     for title in TITLES:
-        if value.lower().startswith(title.lower()):
+        if value.casefold().startswith(title.casefold()):
             value = value[len(title):].strip()
     return value
 

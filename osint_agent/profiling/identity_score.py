@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from difflib import SequenceMatcher
 
+from .normalizers import fold_key
+
 WEIGHTS = {
     "same_email": 1.0,
     "same_phone": 1.0,
@@ -21,7 +23,7 @@ VERDICTS = ("Confirmed", "Probable", "Possible", "Contradicted", "Unverified")
 
 
 def _values(profile: dict, key: str) -> set[str]:
-    return {str(v).strip().lower() for v in profile.get(key, []) if str(v).strip()}
+    return {fold_key(str(v)) for v in profile.get(key, []) if str(v).strip()}
 
 
 def _ratio(a: set[str], b: set[str]) -> float:
@@ -43,7 +45,7 @@ def score_pair(a: dict, b: dict) -> dict:
     if _values(a, "phones") & _values(b, "phones"):
         score += WEIGHTS["same_phone"]
         signals.append("same_phone")
-    if a.get("explicit_links") and b.get("key") in {str(x).lower() for x in a["explicit_links"]}:
+    if a.get("explicit_links") and fold_key(b.get("key", "")) in {fold_key(str(x)) for x in a["explicit_links"]}:
         score += WEIGHTS["explicit_link"]
         signals.append("explicit_link")
     if a.get("avatar_hash") and a.get("avatar_hash") == b.get("avatar_hash"):
@@ -71,7 +73,7 @@ def score_pair(a: dict, b: dict) -> dict:
         score += WEIGHTS["same_org_or_location"]
         signals.append("same_org_or_location")
 
-    if a.get("username") and a.get("username") == b.get("username"):
+    if a.get("username") and fold_key(a.get("username", "")) == fold_key(b.get("username", "")):
         score += WEIGHTS["same_username"]
         signals.append("same_username")
 

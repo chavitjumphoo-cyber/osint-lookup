@@ -5,6 +5,7 @@ from __future__ import annotations
 from . import cognitive, narrative, profile_resolver, relationships
 from . import timeline as timeline_mod
 from .identity_score import score_pair
+from .normalizers import fold_key
 
 PIVOT_TOOLS = {
     "email": ["breach_check", "gravatar_lookup", "web_search"],
@@ -40,7 +41,7 @@ def build(store, run_id: str) -> dict:
         if entity["type"] not in {"email", "phone", "username", "url", "name", "organization", "location", "handle"}:
             continue
         kind = "username" if entity["type"] == "handle" else entity["type"]
-        key = (kind, entity["value"].lower())
+        key = (kind, fold_key(entity["value"]))
         item = grouped.setdefault(
             key,
             {
@@ -67,7 +68,7 @@ def build(store, run_id: str) -> dict:
             ("organization", profile["organizations"], "organizations"),
         ):
             for value in profile.get(field, []) if field in profile else bucket:
-                key = (kind, str(value).lower())
+                key = (kind, fold_key(str(value)))
                 if key in grouped and profile["key"] not in grouped[key]["profiles"]:
                     grouped[key]["profiles"].append(profile["key"])
 

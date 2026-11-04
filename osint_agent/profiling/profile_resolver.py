@@ -8,6 +8,7 @@ from hashlib import sha1
 
 from . import entity_extractor
 from .collectors import username_from_url
+from .normalizers import fold_key
 
 CONFIDENCE_ORDER = {"Confirmed": 4, "Probable": 3, "Unverified": 2, "Inferred": 1, "Speculative": 0}
 NAME_STOP = {
@@ -18,7 +19,7 @@ NAME_STOP = {
 
 
 def _entity_id(kind: str, value: str) -> str:
-    return "ent_" + sha1(f"{kind}|{value.lower()}".encode()).hexdigest()[:14]
+    return "ent_" + sha1(f"{kind}|{fold_key(value)}".encode()).hexdigest()[:14]
 
 
 def extract_entities(artifacts: list[dict]) -> list[dict]:
@@ -33,7 +34,7 @@ def extract_entities(artifacts: list[dict]) -> list[dict]:
         for kind in ("names", "emails", "phones", "handles", "urls", "locations", "organizations", "interests", "dates"):
             key = "name" if kind == "names" else kind.rstrip("s")
             for value in found.get(kind, []):
-                signature = (key, value.lower(), artifact["artifact_id"])
+                signature = (key, fold_key(value), artifact["artifact_id"])
                 if signature in seen:
                     continue
                 seen.add(signature)
@@ -61,7 +62,7 @@ def resolve_profiles(artifacts: list[dict], entities: list[dict]) -> list[dict]:
             continue
         platform = artifact.get("platform") or "unknown"
         username = artifact.get("author") or username_from_url(artifact.get("source_url", "")) or ""
-        key = f"{platform}:{username.lower()}" if username else f"{platform}:{artifact['artifact_id']}"
+        key = f"{platform}:{fold_key(username)}" if username else f"{platform}:{artifact['artifact_id']}"
         profile = profiles.setdefault(
             key,
             {
@@ -91,7 +92,7 @@ def resolve_profiles(artifacts: list[dict], entities: list[dict]) -> list[dict]:
         )
         profile["evidence"].append(artifact["artifact_id"])
         title = re.sub(r"\s+", " ", (artifact.get("title") or "")).strip()
-        if title and title.lower() not in NAME_STOP and 2 < len(title) < 80:
+        if title and fold_key(title) not in NAME_STOP and 2 < len(title) < 80:
             if not any(title in existing or existing in title for existing in profile["display_names"]):
                 profile["display_names"].append(title)
         metadata = artifact.get("metadata") or {}
@@ -140,7 +141,7 @@ def resolve_profiles(artifacts: list[dict], entities: list[dict]) -> list[dict]:
                 continue
             value = re.sub(r"\s+", " ", entity["value"]).strip()
             if target == "display_names":
-                if value.lower() in NAME_STOP or len(value) < 3 or len(value) > 80:
+                if fold_key(value) in NAME_STOP or len(value) < 3 or len(value) > 80:
                     continue
                 if any(value in existing or existing in value for existing in profile[target]):
                     continue

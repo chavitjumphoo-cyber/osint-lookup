@@ -6,6 +6,7 @@ import json
 import re
 
 from . import entity_extractor, thai_identity
+from .normalizers import fold_key
 
 FIELDS = (
     "display_names", "aliases", "usernames", "bio", "locations", "organizations",
@@ -36,7 +37,7 @@ def _add(fields: dict, key: str, value: str, artifact: dict, confidence: str = "
         "snippet": artifact.get("content", "")[:200],
         "confidence": confidence,
     }
-    if all(item["value"].lower() != value.lower() for item in fields[key]):
+    if all(fold_key(item["value"]) != fold_key(value) for item in fields[key]):
         fields[key].append(entry)
 
 
