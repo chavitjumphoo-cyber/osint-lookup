@@ -1,51 +1,39 @@
-# OSINT Lookup — Intelligence-Grade Investigation Platform
+# OSINT Lookup — Agentic OSINT & Subject Intelligence Platform
 
-AI-powered OSINT tool for comprehensive identity research across 30+ platforms using ReAct agent pattern.
+เครื่องมือสืบสวน OSINT แบบ agentic สำหรับงานตำรวจ/นักวิเคราะห์: เก็บหลักฐานจากข้อมูลสาธารณะ,
+สกัดโปรไฟล์, วิเคราะห์ 6D, และสร้าง Subject Intelligence Dossier ที่อ้างอิงย้อนกลับได้ทุกข้อ
+
+> ใช้กับข้อมูลสาธารณะเท่านั้น ไม่ bypass login และไม่ใช้ข้อมูลรั่วที่ผิดกฎหมาย
 
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
 
-# Configure .env (ดู .env.example)
+# ติดตั้ง Moli (headless browser สำหรับ agent)
+./scripts/install-moli.sh
+
+# ตั้งค่า .env จาก .env.example
+cp .env.example .env
+
+# ตรวจความพร้อม
+python -m osint_agent.cli doctor
 
 # CLI
-python -m osint_agent.cli doctor
 python -m osint_agent.cli scan johndoe -p quick
 
-# REST + SSE API
+# API + UI
 python -m uvicorn osint_agent.api.app:app --port 8000
-curl -X POST localhost:8000/investigate -H 'content-type: application/json' \
-  -d '{"target":"johndoe","profile":"quick"}'
-
-# Streamlit (thin client)
 python -m streamlit run app_modern.py
 ```
 
-เปิด API docs ที่ **http://localhost:8000/docs** หรือ Streamlit ที่ **http://localhost:8501**
-
-## 🖥️ CLI
-
-| คำสั่ง | ใช้ทำอะไร |
-|---|---|
-| `doctor` | ตรวจความพร้อมของเครื่อง |
-| `scan <target> -p quick` | สแกนและแสดงผลทันที (profile: quick/standard/deep) |
-| `agent <target>` | รันด้วย profile standard |
-| `resume <run_id>` | ทำ run เดิมต่อจาก checkpoint |
-| `export <run_id> -o out.json` | ส่งออกหลักฐาน |
-| `export <run_id> --research --docx -o r.docx` | ออกรายงานวิจัยตาม template |
-| `review <run_id>` | ตรวจหลักฐาน/candidate |
-| `review <run_id> --candidate c1 --action confirm` | ตัดสิน candidate |
-
-เพิ่ม `--db path.sqlite` หน้า subcommand เพื่อแยกฐาน run
+- UI: http://localhost:8501
+- API docs: http://localhost:8000/docs
 
 ## ⚙️ Configuration
 
-### .env File
-
 ```env
-# MaxPlus (แนะนำ)
+# MaxPlus (ค่าเริ่มต้น)
 MAXPLUS_API_KEY=...
 MAXPLUS_BASE_URL=https://api.maxplus-ai.cc/claude-cursor-full/v1/models
 MAXPLUS_MODEL=claude-sonnet-5-5
@@ -54,135 +42,113 @@ MAXPLUS_MODEL=claude-sonnet-5-5
 # ANTHROPIC_API_KEY=sk-ant-...
 # ANTHROPIC_BASE_URL=
 # ANTHROPIC_MODEL=
+
+# ไม่บังคับ
+HIBP_API_KEY=
+OSINT_SEARCH_ENGINES=duckduckgo_html,yahoo_uk,brave
 ```
 
 `MAXPLUS_*` มีลำดับความสำคัญเหนือ `ANTHROPIC_*` และตั้งค่าได้จากหน้า Settings ใน UI
+ถ้าไม่มี API key ระบบยังสแกนได้ด้วย deterministic fallback แต่จะไม่ใช้ LLM planner
 
-**API Keys are optional** — the app will use defaults from `.env` if not provided via UI.
-
-## 📁 Project Structure
-
-```
-osint-lookup/
-├── app_modern.py              # Streamlit UI (main app)
-├── landing.html               # Landing page
-├── .env                        # Configuration
-├── requirements.txt            # Dependencies
-└── osint_agent/                # Backend engine
-    ├── agent.py               # ReAct loop orchestrator
-    ├── cli.py                 # CLI (doctor; scan/agent/resume ตาม Phase 2)
-    ├── tools/                 # OSINT tools แยกหมวด + lazy import
-    ├── platform_scanner.py    # 30+ platform scanner (found/not_found/blocked/unknown)
-    ├── advanced_tools.py      # Avatar/stylometry analysis
-    ├── system_prompt.py       # AI agent instructions
-    ├── synint_agents.py       # SYNINT-inspired agents
-    ├── graph.py               # Relationship graph builder
-    ├── report_export.py       # Report formatting
-    └── access.py              # Audit logging
-```
-
-## 🔧 Features
-
-### Core Tools
-- **Phone Scanner**: WhatsApp status, SIM carrier lookup, international format detection
-- **Email Lookup**: Gmail validation, domain analysis
-- **Username Search**: Cross-platform verification
-- **Reverse Image Search**: Avatar/photo lookup
-- **Domain/URL Analysis**: WHOIS, DNS, registrar info
-
-### Multi-Platform Scanner (30+)
-- Social: Facebook, Instagram, Twitter/X, TikTok, LinkedIn, YouTube, Snapchat, Telegram
-- Developer: GitHub, GitLab, Stack Overflow, HackerRank, LeetCode, Kaggle
-- Forums: Pantip, Medium, Reddit, DeviantArt, Behance
-- Gaming: Twitch, Steam, Xbox, PlayStation
-
-### Advanced Analysis
-- **Identity Triangulation**: Link identities across platforms
-- **Avatar Comparison**: Perceptual hash matching
-- **Stylometry Analysis**: Writing style correlation
-- **Social Graph**: Relationship visualization
-
-## 🧠 Profiling
-
-- lead-driven corpus → profile resolver → 6D Cognitive Profiling
-- ทุกข้อค้นพบอ้าง artifact id + URL + hash; OCEAN เป็นสมมติฐานจากสถิติข้อความ
-- Dossier 14 หัวข้อ + 6D ทุกมิติ และรายงานวิจัยแยกสำหรับส่งอาจารย์/หน่วยงาน
-
-## 🧠 How It Works
-
-1. **User Input**: Enter identifier (phone, email, username, etc.)
-2. **ReAct Agent Loop**:
-   - Thinks: What tools are needed?
-   - Plans: Which platforms to search?
-   - Acts: Gathers data from multiple sources
-   - Observes: Analyzes results
-   - Synthesizes: Correlates findings
-3. **Report Generation**: HTML/Markdown export with evidence trail
-
-## 🛠️ Tech Stack
-
-- **Frontend**: Streamlit (Python-based, no Node.js required)
-- **Backend**: Python 3.8+
-- **AI**: Anthropic Claude (or MaxPlus-compatible API)
-- **Search**: multi-engine ผ่าน Moli (DuckDuckGo/Yahoo/Brave/Bing/Yandex) — ไม่ใช้ API key
-- **Visualization**: PyVis (relationship graphs)
-
-## 📋 Usage Example
+## 🧠 หลักการทำงาน
 
 ```
-Input: 0882594115 (Thai phone number)
-Output:
-  ├── Carrier: AIS (Thailand)
-  ├── Associated Accounts:
-  │   ├── Instagram: @username
-  │   ├── Facebook: Profile URL
-  │   └── GitHub: username
-  ├── Connections:
-  │   ├── Co-workers/Friends
-  │   └── Related email addresses
-  └── Confidence scores for each finding
+Normalize → hypotheses → search → rank → fetch (Moli) → extract profile
+→ leads → pivot → ownership score → 6D → Dossier
 ```
 
-## ⚖️ Legal & Ethical Notice
+- **standard/deep + มี API key** → `AgentEngine` ให้ LLM เลือก action เองจาก tool ที่จำกัด
+- **quick / ไม่มี key** → deterministic pipeline
+- ทุกผล tool ถูกเก็บเป็น artifact พร้อม `source_url`, `output_hash`, `confidence`
+- ผลค้นยังเป็น `Unverified` จนกว่าจะเปิดอ่านจริง
+- LLM ห้ามสร้าง identifier เอง; validator ตัด finding ที่อ้าง evidence ไม่มีจริง
 
-This tool uses only **public data** and is subject to:
-- PDPA (Thai Personal Data Protection Act)
-- GDPR (EU General Data Protection Regulation)
-- Local privacy laws where applicable
+### Evidence tiers
 
-The agent includes ethical guidelines:
-- ❌ No unauthorized system bypass
-- ❌ No use of leaked/private data
-- ✅ Confidence scores for all findings
-- ✅ User warnings for innocent targets
+`direct` → `derived` → `inferred` → `enrichment` และ map เป็น
+`Confirmed / Probable / Possible / Unverified / Inferred / Speculative`
 
-**Users are responsible for compliance with applicable laws.**
+## 🔎 ความสามารถ
 
-## 📚 Documentation
+- ค้นหลาย engine ผ่าน Moli: DuckDuckGo, Yahoo, Brave, Bing, Yandex + fallback ddgs/googlesearch
+- platform probe 30+ แห่ง จำแนก found / not_found / blocked / unknown
+- vendor scanner: GitHub, GitLab, Reddit, Telegram, Keybase, Twitch, Medium, npm, Pinterest, X, Instagram, Facebook
+- เบอร์: carrier, WhatsApp, footprint; อีเมล: HIBP, Gravatar; โดเมน: DNS, RDAP/WHOIS, Wayback
+- avatar dHash, stylometry, trust anchor, BM25 evidence memory
 
-- `MODERN_UI.md` — UI/UX design notes
-- `osint_agent/system_prompt.py` — Agent instructions
+### ชื่อไทยและครอบครัว
 
-## 🐛 Troubleshooting
+- แยกชื่อ/นามสกุลพร้อม source + snippet
+- นามสกุลกลายเป็น pivot: ครอบครัว, พี่น้อง, บิดา, มารดา, ญาติ + จังหวัด/องค์กร
+- สกัดความสัมพันธ์ที่มีคำระบุจริง (พ่อ/แม่/พี่/คู่สมรส/เพื่อนร่วมงาน) แยกจาก co-occurrence
+- นามสกุลซ้ำไม่ถือเป็นหลักฐานครอบครัว
 
-### Port already in use
+### 6D Cognitive Profiling
+
+Identity / Geo-temporal / Psychological (OCEAN) / Technical / Ideological / OpSec
+ทุกมิติมี confidence, rationale, metrics, evidence และบอก “ประเมินไม่ได้” เมื่อหลักฐานไม่พอ
+OCEAN เป็นสมมติฐานจากสถิติข้อความ ไม่ใช่แบบทดสอบจิตวิทยา
+
+## 🖥️ UI
+
+แท็บ: บุคคลนี้คือใคร · ตัวระบุที่พบ · โปรไฟล์ · 6D · ความสัมพันธ์ · Timeline · รายงาน · Agent actions · หลักฐาน · Candidates · ผัง · ส่งออก
+
+กด “วิเคราะห์ต่อ” ที่ตัวระบุ/นามสกุลเพื่อสร้าง child run ที่ผูก `parent_run_id`
+
+## 🖥️ CLI
+
+| คำสั่ง | ใช้ทำอะไร |
+|---|---|
+| `doctor` | ตรวจความพร้อม (รวม Moli) |
+| `scan <target> -p quick\|standard\|deep` | สแกนและแสดงผล |
+| `agent <target>` | รัน standard |
+| `resume <run_id>` | ทำต่อจาก checkpoint |
+| `export <run_id> -o out.json` | ส่งออกหลักฐาน |
+| `export <run_id> --research --docx -o r.docx` | รายงานวิจัยตาม template |
+| `review <run_id> --candidate c1 --action confirm` | ตัดสิน candidate |
+
+## 🔌 API
+
+| Method | Path |
+|---|---|
+| POST | `/investigate` |
+| GET | `/runs/{id}` |
+| GET | `/runs/{id}/events` (SSE) |
+| GET | `/runs/{id}/analysis` |
+| POST | `/runs/{id}/pivot` |
+| GET | `/runs/{id}/report` |
+| GET | `/runs/{id}/research-report` (`?format=docx`) |
+| POST | `/runs/{id}/review` |
+| POST | `/runs/{id}/cancel` / `/resume` |
+
+## 📁 โครงสร้าง
+
+```
+osint_agent/
+├── api/                  # FastAPI + SSE
+├── services/             # agent engine, orchestrator, budget, store, trust anchor
+├── profiling/            # corpus, extractor, resolver, 6D, synthesizer, research report
+├── tools/                # 22 tools (lazy import)
+├── knowledge/            # playbooks + anti-hallucination
+├── core/                 # evidence schema + hash
+└── cli.py
+vendor/                   # SYNINT core + osint-d2 adapters (ดู VENDORED.md)
+```
+
+## 🧪 Tests
+
 ```bash
-streamlit run app_modern.py --server.port 8502
+make test          # ไม่ยิงเน็ต
+make lint
 ```
 
-### Clear cache
-```bash
-rm -rf ~/.streamlit/cache
-rm -rf .streamlit
-```
+## ⚖️ ข้อจำกัดและจริยธรรม
 
-### ตรวจความพร้อมของเครื่อง
-```bash
-python -m osint_agent.cli doctor
-```
+- ข้อมูลสาธารณะเท่านั้น; หน้า blocked คือ “ตรวจไม่ได้” ไม่ใช่ “ไม่พบ”
+- PDPA: ไม่รายงานพิกัดบ้าน real-time, เลขบัตร, ทะเบียนรถเต็ม
+- ไม่ auto-merge ตัวตน — identity candidate ต้องผ่าน human review
+- “ไม่พบข้อมูล” ไม่เท่ากับ “ปลอดภัย”
+- API/UI ไม่มี authentication ควร bind localhost
 
-### Test backend
-```bash
-make test        # ไม่ยิงเน็ต
-make test-network
-```
+เอกสารเพิ่มเติม: `ARCHITECTURE.md`, `THREAT_MODEL.md`, `DPIA.md`, `VENDORED.md`
