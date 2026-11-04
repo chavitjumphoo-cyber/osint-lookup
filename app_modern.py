@@ -590,7 +590,7 @@ if submitted:
             tab_who, tab_ids, tab_profiles, tab_6d, tab_rel, tab_time,
             tab_report, tab_actions, tab_evidence, tab_candidates, tab_graph, tab_export,
         ) = st.tabs([
-            "🧭 บุคคลนี้คือใคร", "🔎 ตัวระบุที่พบ", "👤 โปรไฟล์", "🧠 6D",
+            "🧭 สรุปหน้าเดียว", "🔎 ตัวระบุที่พบ", "👤 โปรไฟล์", "🧠 6D",
             "🕸️ ความสัมพันธ์", "🕒 Timeline", "📄 รายงาน", "🤖 Agent actions",
             "🧾 หลักฐาน", "👥 Candidates", "🕸️ ผัง", "💾 ส่งออก",
         ])
@@ -602,24 +602,42 @@ if submitted:
                 st.success(f"สร้าง run ต่อเนื่อง: {child}")
 
         with tab_who:
-            narr = analysis.get("narrative") or {}
-            st.markdown(narr.get("identity_answer", {}).get("narrative", "ยังไม่สามารถระบุได้"))
+            brief = analysis.get("executive_brief") or {}
+            st.markdown(f"## {brief.get('headline', 'ยังไม่สามารถระบุตัวบุคคลได้')}")
+            st.markdown(brief.get("identity_answer", ""))
+            if brief.get("quick_facts"):
+                st.table(brief["quick_facts"])
             for key, title in (
-                ("digital_identity", "อัตลักษณ์ดิจิทัล"),
-                ("work_education", "อาชีพ/การศึกษา/องค์กร"),
-                ("geo_temporal", "พื้นที่และเวลา"),
-                ("family", "ครอบครัว/บุคคลแวดล้อม"),
-                ("lifestyle", "ความสนใจ"),
+                ("overall_assessment", "ภาพรวม"),
+                ("relationships_summary", "ความสัมพันธ์"),
+                ("six_d_summary", "สรุป 6D"),
             ):
-                st.markdown(f"**{title}**")
-                st.markdown(narr.get(key, {}).get("narrative", "ยังไม่พบข้อมูล"))
-            st.markdown("**6D**")
-            for key, label in (("identity","Identity"),("geo_temporal","Geo-temporal"),
-                               ("psychological","Psychological/OCEAN"),("technical","Technical"),
-                               ("ideological","Ideological"),("opsec","OpSec")):
-                item = (narr.get("six_d") or {}).get(key, {})
-                st.markdown(f"- **{label}** ({item.get('confidence','Unverified')}): {item.get('narrative','ประเมินไม่ได้')}")
-            st.caption("ย่อหน้าทั้งหมดอ้าง evidence id ที่ตรวจสอบได้; ดูรายละเอียดในแท็บหลักฐาน")
+                if brief.get(key):
+                    st.markdown(f"**{title}**")
+                    st.markdown(brief[key])
+            for key, title in (
+                ("confirmed", "ยืนยันได้"),
+                ("probable", "มีความเป็นไปได้"),
+                ("contradictions", "ขัดแย้ง"),
+                ("unknowns", "ยังตอบไม่ได้"),
+                ("recommended_next_steps", "จุดที่ควรสืบต่อ"),
+            ):
+                if brief.get(key):
+                    st.markdown(f"**{title}**")
+                    for item in brief[key]:
+                        st.markdown(f"- {item}")
+            with st.expander("รายละเอียดแบบร้อยแก้ว"):
+                narr = analysis.get("narrative") or {}
+                for key, title in (
+                    ("digital_identity", "อัตลักษณ์ดิจิทัล"),
+                    ("work_education", "อาชีพ/การศึกษา/องค์กร"),
+                    ("geo_temporal", "พื้นที่และเวลา"),
+                    ("family", "ครอบครัว/บุคคลแวดล้อม"),
+                    ("lifestyle", "ความสนใจ"),
+                ):
+                    st.markdown(f"**{title}**")
+                    st.markdown(narr.get(key, {}).get("narrative", "ยังไม่พบข้อมูล"))
+            st.caption("ทุกข้อควรตรวจกับแท็บหลักฐานก่อนใช้ตัดสินใจ")
 
         with tab_ids:
             if analysis["names"]:

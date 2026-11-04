@@ -9,7 +9,7 @@ import json
 import os
 import re
 
-from . import cognitive, narrative
+from . import cognitive, executive_brief, narrative
 from .normalizers import fold_key
 
 
@@ -141,11 +141,14 @@ def synthesize(
         "artifact_ids": [a["artifact_id"] for a in artifacts],
     }
     data["narrative"] = narrative.build(data, artifacts)
+    data["executive_brief"] = executive_brief.build(data, artifacts)
     return data
 
 
 def render_markdown(data: dict, run: dict) -> str:
     out = ["# Subject Intelligence Dossier", ""]
+    if data.get("executive_brief"):
+        out += [executive_brief.render(data["executive_brief"]), "---", ""]
     if data.get("narrative"):
         out += [narrative.render(data["narrative"]), ""]
     out += [f"- **เป้าหมาย**: `{run['target']}` ({run['target_type']})", f"- **Run**: `{run['id']}`", ""]
@@ -272,6 +275,7 @@ def llm_synthesize(data: dict, run: dict) -> dict:
         merged = {**data, **{key: value for key, value in parsed.items() if key in data}}
         merged["findings"] = _validate_findings(merged.get("findings") or [], data)
         merged["narrative"] = narrative.llm_build(merged, data.get("_artifacts_full") or [])
+        merged["executive_brief"] = executive_brief.llm_build(merged, data.get("_artifacts_full") or [])
         return merged
     except Exception:  # noqa: BLE001
         return data

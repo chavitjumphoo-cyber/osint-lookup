@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import cognitive, narrative, profile_resolver, relationships
+from . import cognitive, executive_brief, narrative, profile_resolver, relationships
 from . import timeline as timeline_mod
 from .identity_score import score_pair
 from .normalizers import fold_key
@@ -119,6 +119,7 @@ def build(store, run_id: str) -> dict:
 
     return {
         "run": run,
+        "executive_brief": executive_brief.build(data_for_narrative, artifacts),
         "narrative": narrative.build(data_for_narrative, artifacts),
         "identifiers": identifiers,
         "profiles": profiles,
