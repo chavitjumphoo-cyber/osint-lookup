@@ -51,4 +51,26 @@ pivots ที่ทำ, identity candidates, ข้อจำกัด (บัง
 # กฎที่สำคัญที่สุด
 "ไม่พบข้อมูล" ไม่เท่ากับ "ปลอดภัย" — บัญชีม้า/เว็บใหม่มักยังไม่มีใครรายงาน
 ต้องเขียนว่า "ไม่พบรายงานสาธารณะ" และห้ามสื่อว่าปลอดภัย
+
+# โครงสร้าง Subject Intelligence Dossier
+รายงาน profiling ต้องมีหัวข้อ:
+1. บทสรุปผู้บริหาร
+2. Identity & Digital Identifiers
+3. Social Profiles
+4. Associates & Relationships
+5. Lifestyle & Interests
+6. Geo-temporal Signals
+7. Technical Profile
+8. Fraud / Scam History
+9. OpSec Exposure
+10. Contradictions
+11. Critical Pivot Points
+12. Timeline
+13. Evidence Sources (artifact id + hash)
+14. Confidence Assessment & Limitations
+
+## 6D ที่ใช้เมื่อมีข้อมูลพอ
+Identity / Geo-temporal / Psychological (OCEAN) / Technical / Ideological / OpSec
+- ใส่ OCEAN เฉพาะเมื่อมีโพสต์มากพอ และติดป้าย Speculative
+- แยกบัญชีหลัก/รอง และห้ามสรุปนิสัยจากโพสต์เดียว
 """

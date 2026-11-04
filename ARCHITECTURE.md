@@ -1,6 +1,17 @@
 # Architecture
 
-## ชั้นการทำงาน
+## ชั้นการทำงาน (lead-driven profiling)
+
+```
+Normalize → hypotheses → search → rank → fetch → extract → leads → pivot
+                                              ↓
+                                     profiling corpus
+                                              ↓
+                          profiles / entities / timeline / contradictions
+                                              ↓
+                                  Subject Intelligence Dossier
+```
+
 
 ```
 CLI / REST+SSE / Streamlit (thin client)
@@ -13,7 +24,7 @@ CLI / REST+SSE / Streamlit (thin client)
               │
   core/evidence (schema, hash, untrusted wrap)
               │
-      services/store (SQLite: run/event/step/evidence/report)
+      services/store (SQLite: run/event/step/evidence/artifact/report)
               │
       vendor/ (SYNINT core + osint-d2 adapters)
 ```
@@ -35,6 +46,12 @@ status ∈ ok | empty | blocked | unknown | failed
 ```
 
 `blocked` = ตรวจไม่ได้, `empty` = ตรวจแล้วไม่พบ — รายงานต้องแยกสองอย่างนี้
+
+## Profiling corpus
+
+`profiling/` เก็บ artifact ทุกชิ้นพร้อม source_url, source_type, output_hash และ confidence
+แล้วสกัดเป็น entity → profile → relationships/timeline → synthesizer
+ผลค้นยังเป็น Unverified จนกว่าจะเปิดอ่านจริง
 
 ## Playbooks
 

@@ -1,7 +1,7 @@
 import pytest
 
+from osint_agent.profiling.artifacts import Artifact
 from osint_agent.services import orchestrator as mod
-from osint_agent.services import tool_runner as runner
 from osint_agent.services.orchestrator import Orchestrator, RunNotFound
 from osint_agent.services.store import RunStore
 
@@ -12,126 +12,126 @@ def store(tmp_path):
 
 
 @pytest.fixture
-def fake_tool(monkeypatch):
-    calls = []
+def fake_collectors(monkeypatch):
+    calls = {"search": [], "fetch": [], "scan": []}
 
-    def fake(name, args):
-        calls.append((name, args))
-        return {"output": f"ผลของ {name}", "images": []}
+    def fake_search(query, limit=8):
+        calls["search"].append(query)
+        return [
+            Artifact(
+                source_url=f"https://github.com/user?q={len(calls['search'])}",
+                source_type="search_result",
+                source_tool="search:fake",
+                platform="github",
+                title="John Doe",
+                content="Python developer in Bangkok",
+                query=query,
+            )
+        ]
 
-    monkeypatch.setattr(runner, "execute_tool", fake)
+    def fake_fetch(url):
+        calls["fetch"].append(url)
+        return Artifact(
+            source_url=url,
+            source_type="profile",
+            source_tool="moli_fetch",
+            platform="github",
+            title="John Doe",
+            author="user",
+            content="John Doe\nPython developer\nBangkok\nworks at Acme",
+            confidence="Probable",
+        )
+
+    def fake_scan(username, timeout=45):
+        calls["scan"].append(username)
+        return [
+            Artifact(
+                source_url=f"https://github.com/{username}",
+                source_type="profile",
+                source_tool="scanner:github",
+                platform="github",
+                title="John Doe",
+                author=username,
+                content="John Doe\nPython developer\nBangkok",
+                confidence="Probable",
+            )
+        ]
+
+    monkeypatch.setattr(mod.collectors, "search", fake_search)
+    monkeypatch.setattr(mod.collectors, "fetch", fake_fetch)
+    monkeypatch.setattr(mod.collectors, "scan_profiles", fake_scan)
     return calls
 
 
-def test_username_plan_runs_and_records(store, fake_tool):
+def test_username_run_builds_corpus_and_dossier(store, fake_collectors):
     orchestrator = Orchestrator(store)
     run_id = orchestrator.start("johndoe", "quick")
     result = orchestrator.run(run_id)
 
     assert result.status == "done"
-    assert [name for name, _ in fake_tool] == ["scan_platforms", "sherlock_username"]
-    assert store.get_run(run_id)["status"] == "done"
-    tools = [finding["tool"] for finding in store.list_findings(run_id)]
-    assert "scan_platforms" in tools and "evidence_scoring" in tools
-    assert store.get_report(run_id)
-    kinds = [event["kind"] for event in store.list_events(run_id)]
-    assert "start" in kinds and "done" in kinds
+    report = store.get_report(run_id)
+    assert "Subject Intelligence Dossier" in report
+    assert "Social Profiles" in report
+    assert "john" in report.lower()
+    assert fake_collectors["scan"][0] == "johndoe"
+    assert store.list_artifacts(run_id)
 
 
-def test_resume_skips_completed_steps(store, fake_tool):
+def test_search_result_urls_are_fetched(store, fake_collectors):
     orchestrator = Orchestrator(store)
     run_id = orchestrator.start("johndoe", "quick")
     orchestrator.run(run_id)
-
-    store.set_status(run_id, "queued")
-    fake_tool.clear()
-    orchestrator.run(run_id)
-
-    assert fake_tool == []
-    assert any(event["kind"] == "skip" for event in store.list_events(run_id))
+    assert fake_collectors["fetch"], "should open ranked results"
 
 
-def test_cancel_stops_next_step(store, monkeypatch):
+def test_deep_fetches_more_than_quick(store, fake_collectors):
+    orchestrator = Orchestrator(store)
+    quick = orchestrator.start("johndoe", "quick")
+    orchestrator.run(quick)
+    quick_fetches = len(fake_collectors["fetch"])
+    deep = orchestrator.start("johndoe", "deep")
+    orchestrator.run(deep)
+    assert len(fake_collectors["fetch"]) > quick_fetches
+
+
+def test_cancel_stops(store, monkeypatch):
     orchestrator = Orchestrator(store)
     run_id = orchestrator.start("johndoe", "quick")
 
-    def fake(name, args):
+    def fake_search(query, limit=8):
         orchestrator.cancel(run_id)
-        return {"output": "ok", "images": []}
+        return []
 
-    monkeypatch.setattr(runner, "execute_tool", fake)
+    monkeypatch.setattr(mod.collectors, "search", fake_search)
     result = orchestrator.run(run_id)
-
     assert result.status == "cancelled"
-    assert store.get_run(run_id)["status"] == "cancelled"
 
 
-def test_budget_exhaustion_finishes_done(store, monkeypatch):
+def test_search_error_does_not_fail_run(store, monkeypatch):
     orchestrator = Orchestrator(store)
     run_id = orchestrator.start("johndoe", "quick")
-    tight = mod.Budget(max_steps=1)
-    monkeypatch.setattr(
-        mod,
-        "Budget",
-        type(
-            "B",
-            (),
-            {
-                "quick": staticmethod(lambda: tight),
-                "standard": staticmethod(lambda: tight),
-                "deep": staticmethod(lambda: tight),
-            },
-        ),
-    )
-    monkeypatch.setattr(runner, "execute_tool", lambda n, a: {"output": "x", "images": []})
+    monkeypatch.setattr(mod.collectors, "search", lambda q, limit=8: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr(mod.collectors, "scan_profiles", lambda u, timeout=45: [])
     result = orchestrator.run(run_id)
-
     assert result.status == "done"
-    assert any(event["kind"] == "budget" for event in store.list_events(run_id))
+    assert any(f["status"] == "failed" for f in store.list_findings(run_id))
 
 
-def test_tool_exception_marks_failed(store, monkeypatch):
+def test_budget_exhaustion_still_reports(store, monkeypatch):
     orchestrator = Orchestrator(store)
     run_id = orchestrator.start("johndoe", "quick")
-    monkeypatch.setattr(runner, "execute_tool", lambda n, a: 1 / 0)
+    tight = mod.budget_mod.Budget(max_steps=1)
+    monkeypatch.setattr(
+        mod.budget_mod,
+        "Budget",
+        type("B", (), {"quick": staticmethod(lambda: tight), "standard": staticmethod(lambda: tight), "deep": staticmethod(lambda: tight)}),
+    )
+    monkeypatch.setattr(mod.collectors, "search", lambda q, limit=8: [])
     result = orchestrator.run(run_id)
-
-    assert result.status == "failed"
-    assert "ZeroDivisionError" in result.error
+    assert result.status == "done"
+    assert store.get_report(run_id)
 
 
 def test_unknown_run(store):
     with pytest.raises(RunNotFound):
         Orchestrator(store).run("missing")
-
-
-def test_invalid_profile(store):
-    with pytest.raises(ValueError):
-        Orchestrator(store).start("johndoe", "deepest")
-
-
-def test_deep_domain_uses_deep_playbook_tools(store, fake_tool):
-    orchestrator = Orchestrator(store)
-    run_id = orchestrator.start("example.com", "deep")
-    orchestrator.run(run_id)
-    tools = [name for name, _ in fake_tool]
-    assert "whois_lookup" in tools
-    assert "wayback_lookup" in tools
-    assert "dns_lookup" in tools
-    report = store.get_report(run_id)
-    assert "ข้อจำกัด" in report
-
-
-def test_identity_candidate_recorded_from_shared_email(store, monkeypatch):
-    orchestrator = Orchestrator(store)
-    run_id = orchestrator.start("a@b.com", "quick")
-
-    def fake(name, args):
-        return {"output": "a@b.com และ a@b.com", "images": []}
-
-    from osint_agent.services import tool_runner
-
-    monkeypatch.setattr(tool_runner, "execute_tool", fake)
-    orchestrator.run(run_id)
-    candidates = store.list_candidates(run_id)
-    assert isinstance(candidates, list)

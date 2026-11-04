@@ -86,6 +86,16 @@ class RunStore:
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (run_id, seq)
                 );
+                CREATE TABLE IF NOT EXISTS artifacts (
+                    run_id TEXT NOT NULL,
+                    artifact_id TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    platform TEXT NOT NULL DEFAULT '',
+                    payload TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (run_id, artifact_id)
+                );
                 CREATE TABLE IF NOT EXISTS reports (
                     run_id TEXT PRIMARY KEY,
                     markdown TEXT NOT NULL,
@@ -281,6 +291,39 @@ class RunStore:
             (c for c in self.list_candidates(run_id) if c["candidate_id"] == candidate_id), None
         )
 
+    # -- artifacts --------------------------------------------------------
+
+    def add_artifact(self, run_id: str, artifact: dict) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO artifacts "
+                "(run_id, artifact_id, source_url, source_type, platform, payload, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    run_id,
+                    artifact["artifact_id"],
+                    artifact.get("source_url", ""),
+                    artifact.get("source_type", ""),
+                    artifact.get("platform", ""),
+                    json.dumps(artifact, ensure_ascii=False),
+                    _now(),
+                ),
+            )
+
+    def list_artifacts(self, run_id: str, source_type: str | None = None) -> list[dict]:
+        with self._connect() as connection:
+            if source_type:
+                rows = connection.execute(
+                    "SELECT payload FROM artifacts WHERE run_id = ? AND source_type = ? "
+                    "ORDER BY created_at",
+                    (run_id, source_type),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT payload FROM artifacts WHERE run_id = ? ORDER BY created_at", (run_id,)
+                ).fetchall()
+        return [json.loads(row["payload"]) for row in rows]
+
     def save_report(self, run_id: str, markdown: str) -> None:
         with self._lock, self._connect() as connection:
             connection.execute(
@@ -313,6 +356,7 @@ class RunStore:
         run["evidence"] = self.list_evidence(run_id)
         run["candidates"] = self.list_candidates(run_id)
         run["report"] = self.get_report(run_id)
+        run["artifacts"] = self.list_artifacts(run_id)
         return run
 
     def export_json(self, run_id: str) -> str:

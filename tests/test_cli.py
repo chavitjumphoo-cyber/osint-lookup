@@ -1,5 +1,5 @@
 from osint_agent import cli
-from osint_agent.services import tool_runner as runner
+from osint_agent.services import orchestrator as orch
 
 
 def test_doctor_runs(capsys):
@@ -9,16 +9,18 @@ def test_doctor_runs(capsys):
 
 
 def test_scan_prints_findings(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(runner, "execute_tool", lambda n, a: {"output": f"{n} result", "images": []})
+    monkeypatch.setattr(orch.collectors, "search", lambda q, limit=8: [])
+    monkeypatch.setattr(orch.collectors, "scan_profiles", lambda u, timeout=45: [])
     db = str(tmp_path / "runs.sqlite")
     code = cli.main(["--db", db, "scan", "johndoe", "-p", "quick"])
     out = capsys.readouterr().out
     assert code == 0
-    assert "scan_platforms result" in out
+    assert "web_search" in out or "scan_profiles" in out
 
 
 def test_export_writes_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(runner, "execute_tool", lambda n, a: {"output": "x", "images": []})
+    monkeypatch.setattr(orch.collectors, "search", lambda q, limit=8: [])
+    monkeypatch.setattr(orch.collectors, "scan_profiles", lambda u, timeout=45: [])
     db = str(tmp_path / "runs.sqlite")
     cli.main(["--db", db, "scan", "johndoe", "-p", "quick"])
     from osint_agent.services.store import RunStore

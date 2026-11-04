@@ -4,13 +4,24 @@ import pytest
 from fastapi.testclient import TestClient
 
 from osint_agent.api.app import create_app
-from osint_agent.services import tool_runner as runner
+from osint_agent.profiling.artifacts import Artifact
+from osint_agent.services import orchestrator as orch
 from osint_agent.services.store import RunStore
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(runner, "execute_tool", lambda n, a: {"output": f"{n} ok", "images": []})
+    def fake_search(query, limit=8):
+        return [Artifact(source_url="https://github.com/user", source_type="search_result",
+                         source_tool="search:fake", platform="github", title="John", content="dev")]
+
+    def fake_fetch(url):
+        return Artifact(source_url=url, source_type="profile", source_tool="moli_fetch",
+                        platform="github", title="John", author="user", content="John dev Bangkok")
+
+    monkeypatch.setattr(orch.collectors, "search", fake_search)
+    monkeypatch.setattr(orch.collectors, "fetch", fake_fetch)
+    monkeypatch.setattr(orch.collectors, "scan_profiles", lambda u, timeout=45: [])
     app = create_app(RunStore(tmp_path / "runs.sqlite"))
     return TestClient(app)
 
@@ -39,7 +50,7 @@ def test_investigate_and_fetch_run(client):
     assert run["status"] == "done"
     assert run["target_type"] == "username"
     findings = client.get(f"/runs/{run_id}/findings").json()["findings"]
-    assert any(item["tool"] == "scan_platforms" for item in findings)
+    assert any(item["tool"] == "web_search" for item in findings)
     report = client.get(f"/runs/{run_id}/report").json()["markdown"]
     assert "ข้อจำกัด" in report
 

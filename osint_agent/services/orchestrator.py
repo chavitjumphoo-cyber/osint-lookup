@@ -1,24 +1,29 @@
-"""Orchestrator — วางแผนตาม playbook, เก็บ evidence + hash, checkpoint และให้ specialist ตรวจ
+"""Orchestrator — lead-driven investigation
 
-Phase 5: ใช้ playbook เป็นแผน, มี specialist (identity/contradiction/scoring/timeline)
-และบังคับ emit_report ท้ายงาน
+Normalize → hypotheses → search → rank → fetch → extract → leads → pivot → synthesize
+ทุก artifact มี source/hash; รายงานสร้างจาก corpus ไม่ใช่รายการ evidence แบน
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from hashlib import sha1
 
 from vendor.synint.core.context import InvestigationContext
 from vendor.synint.core.identity_resolution import IdentityResolver
-from vendor.synint.core.schemas import EvidenceItem
 
-from . import report_builder, skills, trust_anchor
-from .budget import Budget, BudgetExceeded, RunBudget
+from ..profiling import collectors, pivots, profile_resolver, relationships, synthesizer
+from ..profiling import corpus as corpus_mod
+from ..profiling import timeline as timeline_mod
+from . import budget as budget_mod
+from . import trust_anchor
 from .store import RunStore
 
 PROFILES = {"quick", "standard", "deep"}
-SPECIALISTS = ("trusted_scan", "identity_candidate", "contradiction", "evidence_scoring", "timeline", "emit_report")
+LIMITS = {
+    "quick": {"queries": 2, "fetch": 2, "leads": 2, "scan": True},
+    "standard": {"queries": 5, "fetch": 4, "leads": 4, "scan": True},
+    "deep": {"queries": 8, "fetch": 7, "leads": 8, "scan": True},
+}
 
 
 class RunNotFound(Exception):
@@ -34,38 +39,6 @@ class RunResult:
     report: str | None = None
 
 
-def _q(value: str) -> str:
-    return f'"{value}"'
-
-
-def _args(tool: str, context: InvestigationContext, run_id: str) -> dict:
-    target = context.original_target
-    kind = context.target_type
-    if tool in {"phone_info"}:
-        return {"number": target}
-    if tool == "scan_phone_advanced":
-        return {"phone_number": target}
-    if tool == "verify_official":
-        return {"value": target}
-    if tool in {"scan_platforms", "sherlock_username", "github_intel"}:
-        return {"username": target}
-    if tool in {"breach_check", "gravatar_lookup"}:
-        return {"email": target}
-    if tool == "fetch_page":
-        return {"url": target if kind == "url" else f"https://{target}"}
-    if tool in {"dns_lookup", "whois_lookup"}:
-        return {"domain": target}
-    if tool == "wayback_lookup":
-        return {"url": target if kind == "url" else f"https://{target}"}
-    if tool == "extract_entities":
-        return {"text": target}
-    if tool == "search_evidence":
-        return {"run_id": run_id, "query": target}
-    if tool in {"web_search", "google_search"}:
-        return {"query": _q(target)}
-    return {}
-
-
 class Orchestrator:
     def __init__(self, store: RunStore | None = None):
         self.store = store or RunStore()
@@ -76,10 +49,6 @@ class Orchestrator:
         if profile not in PROFILES:
             raise ValueError(f"profile ต้องเป็นหนึ่งใน {sorted(PROFILES)}")
         context = InvestigationContext.from_target(target)
-        try:
-            skills.select(context.target_type)
-        except skills.UnknownTargetType:
-            pass
         run_id = self.store.create_run(target, context.target_type, profile, trusted or [])
         self._emit(run_id, "queued", f"รับงาน: {context.target_type} = {target}")
         return run_id
@@ -96,20 +65,17 @@ class Orchestrator:
     def _emit(self, run_id: str, kind: str, text: str) -> None:
         self.store.add_event(run_id, kind, text)
 
-    def _store_outcome(self, run_id: str, outcome) -> None:
-        self.store.add_finding(run_id, outcome.tool, outcome.result, outcome.status, outcome.output_hash)
-        if outcome.status in {"ok", "unknown", "empty"}:
-            for item in outcome.evidence:
-                item.setdefault("supporting_context", {})["output_hash"] = outcome.output_hash
-                self.store.add_evidence(run_id, item)
+    def _finding(self, run_id: str, tool: str, text: str, status: str = "ok", digest: str = "") -> None:
+        self.store.add_finding(run_id, tool, text, status, digest)
 
-    def _registry(self, run_id: str):
-        from vendor.synint.core.registries import EvidenceRegistry
+    def _cancelled(self, run_id: str) -> bool:
+        run = self.store.get_run(run_id)
+        return bool(run and run["status"] == "cancelled")
 
-        registry = EvidenceRegistry()
-        for item in self.store.list_evidence(run_id):
-            registry.add(EvidenceItem.from_dict(item))
-        return registry
+    def _finish(self, run_id: str, status: str, error: str | None = None) -> RunResult:
+        return RunResult(
+            run_id, status, self.store.list_findings(run_id), error, self.store.get_report(run_id)
+        )
 
     # -- run --------------------------------------------------------------
 
@@ -118,160 +84,203 @@ class Orchestrator:
         if not run:
             raise RunNotFound(run_id)
         if run["status"] in {"done", "failed", "cancelled"}:
-            return RunResult(run_id, run["status"], self.store.list_findings(run_id), run.get("error"))
+            return self._finish(run_id, run["status"], run.get("error"))
 
         context = InvestigationContext.from_target(run["target"])
-        budget = RunBudget(
-            {"quick": Budget.quick, "standard": Budget.standard, "deep": Budget.deep}[run["profile"]]()
+        limits = LIMITS[run["profile"]]
+        budget = budget_mod.RunBudget(
+            {"quick": budget_mod.Budget.quick, "standard": budget_mod.Budget.standard, "deep": budget_mod.Budget.deep}[run["profile"]]()
         )
-        try:
-            playbook = skills.select(context.target_type)
-        except skills.UnknownTargetType:
-            playbook = skills.PLAYBOOKS["text"]
-
+        corpus = corpus_mod.Corpus(self.store, run_id)
         self.store.set_status(run_id, "running")
-        self._emit(run_id, "start", f"เริ่มสืบสวน ({run['profile']}) ตาม playbook {playbook.id}")
-        self._emit(run_id, "playbook", playbook.prompt_block(run["profile"]))
+        self._emit(run_id, "start", f"เริ่มสืบสวนแบบ lead-driven ({run['profile']})")
 
         try:
-            steps = playbook.steps_for(run["profile"])
             trusted = self.store.trusted(run_id)
+            anchor_names: list[str] = []
             if trusted and context.target_type == "username":
-                steps.insert(0, skills.PlaybookStep("trusted_scan", "ตัด namesake ด้วย anchor", ["quick", "standard", "deep"]))
+                result = trust_anchor.apply_trust(context.original_target, trusted)
+                anchor_names = result.reference_names
+                self._finding(run_id, "trusted_scan", result.summary())
+                for profile in result.kept:
+                    from ..profiling.artifacts import Artifact
 
-            for step in steps:
-                if self.store.get_run(run_id)["status"] == "cancelled":
-                    self._emit(run_id, "cancelled", "ผู้ใช้ยกเลิกงาน")
+                    corpus.add(
+                        Artifact(
+                            source_url=profile.url,
+                            source_type="profile",
+                            source_tool="trust_anchor",
+                            platform=profile.network_name,
+                            author=profile.username,
+                            title=(profile.metadata or {}).get("name", ""),
+                            content=profile.bio or "",
+                            confidence="Confirmed",
+                        )
+                    )
+
+            # 1) hypotheses
+            queries = pivots.search_queries(context.original_target, context.target_type, anchor_names)
+            self._emit(run_id, "plan", f"สมมติฐานคำค้น {min(len(queries), limits['queries'])} ชุด")
+
+            for query in queries[: limits["queries"]]:
+                if self._cancelled(run_id):
                     return self._finish(run_id, "cancelled")
-
-                if self.store.step_status(run_id, step.tool) == "done":
-                    self._emit(run_id, "skip", f"ข้ามขั้นที่ทำแล้ว: {step.tool}")
-                    continue
-
                 budget.step()
-                self.store.set_step(run_id, step.tool, "running")
-                self._emit(run_id, "tool", f"{step.tool} — {step.why}")
+                budget.tool_call()
+                self._emit(run_id, "search", query)
+                try:
+                    results = collectors.search(query, limit=8)
+                except Exception as exc:  # noqa: BLE001
+                    self._finding(run_id, "web_search", f"{query}: {type(exc).__name__}", "failed")
+                    continue
+                added = sum(1 for artifact in results if corpus.add(artifact))
+                self._finding(run_id, "web_search", f"{query} → {added} ผลลัพธ์")
+                self._emit(run_id, "result", f"{query} → {added} ผลลัพธ์")
 
-                if step.tool == "trusted_scan":
-                    self._trusted_scan(run_id, context.original_target, trusted)
+            # 2) platform metadata
+            if limits["scan"] and context.target_type in {"username", "email"}:
+                username = context.original_target.split("@", 1)[0].lstrip("@")
+                budget.step()
+                self._emit(run_id, "tool", f"scan_profiles {username}")
+                try:
+                    profiles = collectors.scan_profiles(username)
+                except Exception as exc:  # noqa: BLE001
+                    profiles = []
+                    self._finding(run_id, "scan_profiles", type(exc).__name__, "failed")
+                added = sum(1 for artifact in profiles if corpus.add(artifact))
+                self._finding(run_id, "scan_profiles", f"พบโปรไฟล์มีข้อมูล {added}")
+                self._emit(run_id, "result", f"โปรไฟล์ที่มีข้อมูล {added}")
+
+            # 3) rank and fetch
+            fetched_urls = {
+                a["source_url"] for a in corpus.artifacts() if a["source_type"] != "search_result"
+            }
+            search_results = [
+                a for a in corpus.search_results() if a["source_url"] not in fetched_urls
+            ]
+            ranked = sorted({a["source_url"]: a for a in search_results}.values(), key=collectors.rank_result, reverse=True)
+            for artifact in ranked[: limits["fetch"]]:
+                if self._cancelled(run_id):
+                    return self._finish(run_id, "cancelled")
+                budget.step()
+                budget.tool_call()
+                self._emit(run_id, "tool", f"fetch {artifact['source_url']}")
+                fetched = collectors.fetch(artifact["source_url"])
+                corpus.add(fetched)
+                self._finding(run_id, "fetch_page", f"[{fetched.status}] {fetched.source_url}", fetched.status, fetched.output_hash)
+                self._emit(run_id, "result", f"[{fetched.status}] {fetched.source_url}")
+
+            # 4) extract + profiles
+            entities = profile_resolver.extract_entities(corpus.artifacts())
+            profiles = profile_resolver.resolve_profiles(corpus.artifacts(), entities)
+
+            # 5) leads wave
+            leads = self._build_leads(corpus, profiles, context)
+            self._emit(run_id, "plan", f"leads ใหม่ {leads.pending()}")
+            processed = 0
+            while processed < limits["leads"] and not self._cancelled(run_id):
+                lead = leads.next()
+                if not lead:
+                    break
+                processed += 1
+                budget.step()
+                budget.tool_call()
+                self._emit(run_id, "tool", f"pivot {lead.type} → {lead.value}")
+                if lead.type == "url":
+                    artifact = collectors.fetch(lead.value)
+                    corpus.add(artifact)
                 else:
-                    budget.tool_call()
-                    from .tool_runner import run_tool
+                    try:
+                        for artifact in collectors.search(f'"{lead.value}"', limit=5):
+                            corpus.add(artifact)
+                    except Exception:  # noqa: BLE001
+                        pass
+                if lead.type in {"username", "name"}:
+                    try:
+                        for artifact in collectors.scan_profiles(lead.value):
+                            corpus.add(artifact)
+                    except Exception:  # noqa: BLE001
+                        pass
 
-                    outcome = run_tool(step.tool, _args(step.tool, context, run_id), budget.budget.max_result_chars)
-                    self._store_outcome(run_id, outcome)
-                    self._emit(run_id, "result", f"[{outcome.status}] {outcome.result[:240]}".replace("\n", " "))
+            # refresh after pivots
+            entities = profile_resolver.extract_entities(corpus.artifacts())
+            profiles = profile_resolver.resolve_profiles(corpus.artifacts(), entities)
 
-                self.store.set_step(run_id, step.tool, "done")
+            # 6) specialists
+            contradictions = synthesizer.contradictions(profiles, entities)
+            rels = relationships.co_occurring_entities(corpus.artifacts(), entities)
+            events = timeline_mod.build(corpus.artifacts(), entities)
+            self._identity_candidates(run_id, profiles)
+            self._finding(run_id, "contradiction", "\n".join(
+                f"- {c['kind']} {c['value']}: {', '.join(c['detail'])}" for c in contradictions
+            ) or "ไม่พบความขัดแย้ง")
 
-            for specialist in ("identity_candidate", "contradiction", "evidence_scoring", "timeline"):
-                self._specialist(run_id, specialist)
-            self._emit_report(run_id)
-
-            if self.store.get_run(run_id)["status"] == "cancelled":
-                return self._finish(run_id, "cancelled")
+            # 7) synthesize
+            data = synthesizer.synthesize(run, profiles, entities, corpus.artifacts(), rels, contradictions, events)
+            data["limitations"] = [
+                "รวบรวมจากข้อมูลสาธารณะเท่านั้น",
+                "การไม่พบข้อมูลไม่ยืนยันว่าปลอดภัย",
+                f"เปิดอ่านได้ {sum(1 for a in corpus.artifacts() if a['source_type'] != 'search_result')} หน้า",
+            ]
+            data["_artifacts"] = [
+                {key: a.get(key) for key in ("artifact_id", "source_tool", "status", "source_url")}
+                for a in corpus.artifacts()
+            ]
+            data = synthesizer.llm_synthesize(data, run)
+            self.store.save_report(run_id, synthesizer.render_markdown(data, run))
             self.store.set_status(run_id, "done")
+            self._emit(run_id, "report", f"รายงานพร้อม ({len(profiles)} โปรไฟล์)")
             self._emit(run_id, "done", "เสร็จสิ้น")
             return self._finish(run_id, "done")
 
-        except BudgetExceeded as exc:
+        except budget_mod.BudgetExceeded as exc:
             self._emit(run_id, "budget", str(exc))
-            self._specialist(run_id, "evidence_scoring")
-            self._emit_report(run_id)
+            self._safe_report(run_id, run)
             self.store.set_status(run_id, "done")
             self._emit(run_id, "done", "เสร็จสิ้นเพราะหมดเพดาน")
             return self._finish(run_id, "done")
-
         except Exception as exc:  # noqa: BLE001
-            message = f"{type(exc).__name__}: {exc}"
-            try:
-                self._emit_report(run_id)
-            except Exception:  # noqa: BLE001
-                pass
-            self.store.set_status(run_id, "failed", message)
-            self._emit(run_id, "error", message)
-            return self._finish(run_id, "failed", message)
-
-    def _finish(self, run_id: str, status: str, error: str | None = None) -> RunResult:
-        return RunResult(
-            run_id, status, self.store.list_findings(run_id), error, self.store.get_report(run_id)
-        )
+            self._emit(run_id, "error", f"{type(exc).__name__}: {exc}")
+            self._safe_report(run_id, run)
+            self.store.set_status(run_id, "failed", f"{type(exc).__name__}: {exc}")
+            return self._finish(run_id, "failed", str(exc))
 
     # -- specialists ------------------------------------------------------
 
-    def _trusted_scan(self, run_id: str, target: str, anchors: list[str]) -> None:
-        result = trust_anchor.apply_trust(target, anchors)
-        text = result.summary()
-        if result.reference_names:
-            text = f"ชื่ออ้างอิงจาก anchor: {', '.join(result.reference_names)}\n" + text
-        self.store.add_finding(run_id, "trusted_scan", text, "ok", "")
-        for profile in result.kept:
-            self.store.add_evidence(
-                run_id,
-                EvidenceItem(
-                    source_agent="trusted_scan",
-                    evidence_type="url",
-                    value=profile.url,
-                    normalized_value=profile.url.lower(),
-                    confidence=0.9,
-                    source_reference="trust_anchor",
-                    evidence_tier="direct",
-                    supporting_context={"verified_by": "trust_anchor"},
-                ).to_dict(),
-            )
-        self._emit(run_id, "result", text.replace("\n", " ")[:240])
+    def _build_leads(self, corpus, profiles, context):
+        from ..profiling.leads import LeadQueue
 
-    def _specialist(self, run_id: str, name: str) -> None:
-        evidence = self.store.list_evidence(run_id)
-        if name == "identity_candidate":
-            entities: dict[tuple, dict] = {}
-            for item in evidence:
-                key = (item["evidence_type"], item["value"].lower())
-                entity = entities.setdefault(
-                    key,
-                    {"entity_id": "ent_" + sha1(f"{key[0]}|{key[1]}".encode()).hexdigest()[:12]},
-                )
-                bucket = {"email": "emails", "phone": "phones", "username": "usernames"}.get(key[0])
-                if bucket:
-                    entity.setdefault(bucket, []).append(key[1])
-            candidates = IdentityResolver.create_candidates(entities.values())
-            for candidate in candidates:
-                self.store.add_candidate(run_id, candidate.to_dict())
-            self._emit(run_id, "candidate", f"identity candidates: {len(candidates)}")
+        queue = LeadQueue()
+        for profile in profiles:
+            for handle in profile["handles"]:
+                queue.add(handle, "username", "handle ในbio", priority=0.8)
+            for name in profile["display_names"]:
+                queue.add(name, "name", "ชื่อที่แสดง", priority=0.6)
+            if profile["url"]:
+                queue.add(profile["url"], "url", "โปรไฟล์ที่ยังไม่อ่าน", priority=0.9)
+        for artifact in corpus.artifacts("search_result"):
+            if artifact.get("platform") and artifact["source_url"] not in corpus.urls():
+                queue.add(artifact["source_url"], "url", "ผลค้นน่าสนใจ", priority=collectors.rank_result(artifact))
+        return queue
 
-        elif name == "contradiction":
-            counts: dict[str, set[str]] = {}
-            for item in evidence:
-                counts.setdefault(item["evidence_type"], set()).add(item["value"].lower())
-            conflicts = {kind: sorted(values) for kind, values in counts.items() if len(values) > 1}
-            text = "ไม่พบความขัดแย้ง" if not conflicts else "\n".join(
-                f"- {kind}: {', '.join(values)}" for kind, values in conflicts.items()
-            )
-            self.store.add_finding(run_id, "contradiction", text, "ok", "")
-            self._emit(run_id, "result", text.replace("\n", " ")[:240])
+    def _identity_candidates(self, run_id: str, profiles: list[dict]) -> None:
+        entities = [profile_resolver.profile_entities(profile) for profile in profiles]
+        candidates = IdentityResolver.create_candidates(entities)
+        for candidate in candidates:
+            self.store.add_candidate(run_id, candidate.to_dict())
+        self._emit(run_id, "candidate", f"identity candidates: {len(candidates)}")
 
-        elif name == "evidence_scoring":
-            tiers: dict[str, int] = {}
-            for item in evidence:
-                tiers[item.get("evidence_tier", "enrichment")] = tiers.get(item.get("evidence_tier", "enrichment"), 0) + 1
-            text = "การให้ระดับหลักฐาน: " + (", ".join(f"{k}={v}" for k, v in sorted(tiers.items())) or "ไม่มีหลักฐาน")
-            self.store.add_finding(run_id, "evidence_scoring", text, "ok", "")
-            self._emit(run_id, "result", text)
-
-        elif name == "timeline":
-            lines = [
-                f"- {item.get('supporting_context', {}).get('output_hash', '')[:16]} "
-                f"{item['evidence_type']}={item['value']} ({item['source_agent']})"
-                for item in evidence
+    def _safe_report(self, run_id: str, run: dict) -> None:
+        try:
+            corpus = corpus_mod.Corpus(self.store, run_id)
+            entities = profile_resolver.extract_entities(corpus.artifacts())
+            profiles = profile_resolver.resolve_profiles(corpus.artifacts(), entities)
+            data = synthesizer.synthesize(run, profiles, entities, corpus.artifacts(), [], [], [])
+            data["limitations"] = ["งานหยุดก่อนกำหนด — รายงานไม่สมบูรณ์"]
+            data["_artifacts"] = [
+                {key: a.get(key) for key in ("artifact_id", "source_tool", "status", "source_url")}
+                for a in corpus.artifacts()
             ]
-            self.store.add_finding(run_id, "timeline", "\n".join(lines) or "ไม่มีหลักฐาน", "ok", "")
-            self._emit(run_id, "result", f"timeline: {len(evidence)} รายการ")
-
-    def _emit_report(self, run_id: str) -> None:
-        run = self.store.get_run(run_id)
-        evidence = self.store.list_evidence(run_id)
-        findings = self.store.list_findings(run_id)
-        candidates = self.store.list_candidates(run_id)
-        markdown = report_builder.build_report(run, evidence, findings, candidates)
-        self.store.save_report(run_id, markdown)
-        self._emit(run_id, "report", f"รายงานพร้อม ({len(evidence)} หลักฐาน)")
+            self.store.save_report(run_id, synthesizer.render_markdown(data, run))
+        except Exception:  # noqa: BLE001
+            pass

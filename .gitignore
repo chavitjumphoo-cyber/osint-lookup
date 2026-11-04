@@ -44,3 +44,9 @@ audit/*.json
 
 # Run store
 audit/*.sqlite*
+
+# Runtime artifacts
+audit/*.jsonl
+audit/*.sqlite
+audit/*.sqlite-*
+.DS_Store
