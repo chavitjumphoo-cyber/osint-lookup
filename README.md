@@ -13,7 +13,7 @@ pip install -r requirements.txt
 # ติดตั้ง Moli (headless browser สำหรับ agent)
 ./scripts/install-moli.sh
 
-# ตั้งค่า .env จาก .env.example
+# ตั้งค่า .env จาก .env.example (ต้องตั้ง OSINT_SECRET_KEY ก่อนใช้จริง)
 cp .env.example .env
 
 # ตรวจความพร้อม
@@ -27,7 +27,7 @@ python -m uvicorn osint_agent.api.app:app --port 8000
 python -m streamlit run app_modern.py
 ```
 
-- UI: http://localhost:8501
+- UI: http://localhost:8501 (เข้าสู่ระบบด้วยบัญชีด้านล่าง)
 - API docs: http://localhost:8000/docs
 
 ## 🔐 ผู้ใช้และการกำหนดสิทธิ์ (demo)
@@ -64,7 +64,7 @@ HIBP_API_KEY=
 OSINT_SEARCH_ENGINES=duckduckgo_html,yahoo_uk,brave
 ```
 
-`MAXPLUS_*` มีลำดับความสำคัญเหนือ `ANTHROPIC_*` และตั้งค่าได้จากหน้า Settings ใน UI
+`MAXPLUS_*` มีลำดับความสำคัญเหนือ `ANTHROPIC_*` และตั้งค่าได้จากหน้า Settings ใน UI (เฉพาะ admin)
 ถ้าไม่มี API key ระบบยังสแกนได้ด้วย deterministic fallback แต่จะไม่ใช้ LLM planner
 
 ## 🧠 หลักการทำงาน
@@ -126,36 +126,51 @@ OCEAN เป็นสมมติฐานจากสถิติข้อค�
 
 ## 🔌 API
 
-| Method | Path |
-|---|---|
-| POST | `/investigate` |
-| GET | `/runs/{id}` |
-| GET | `/runs/{id}/events` (SSE) |
-| GET | `/runs/{id}/analysis` |
-| POST | `/runs/{id}/pivot` |
-| GET | `/runs/{id}/report` |
-| GET | `/runs/{id}/research-report` (`?format=docx`) |
-| POST | `/runs/{id}/review` |
-| POST | `/runs/{id}/cancel` / `/resume` |
+ทุกเส้นทางยกเว้น `/health` และ `/auth/login` ต้องส่ง `Authorization: Bearer <token>`
+
+| Method | Path | สิทธิ์ |
+|---|---|---|
+| POST | `/auth/login` | สาธารณะ |
+| GET | `/auth/me` | ทุกบทบาท |
+| GET | `/auth/users` | admin |
+| POST | `/auth/logout` | ทุกบทบาท |
+| POST | `/investigate` | analyst/admin |
+| GET | `/runs`, `/runs/{id}` | ทุกบทบาท |
+| GET | `/runs/{id}/events` (SSE) | ทุกบทบาท |
+| GET | `/runs/{id}/analysis`, `/report`, `/findings`, `/candidates` | ทุกบทบาท |
+| POST | `/runs/{id}/pivot` | analyst/admin |
+| GET | `/runs/{id}/research-report` (`?format=docx`) | ทุกบทบาท |
+| POST | `/runs/{id}/review` | analyst/admin |
+| POST | `/runs/{id}/cancel` / `/resume` | analyst/admin |
+
+```bash
+TOKEN=$(curl -s localhost:8000/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"analyst","password":"Analyst#1234"}' | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+curl -H "Authorization: Bearer $TOKEN" localhost:8000/runs
+```
 
 ## 📁 โครงสร้าง
 
 ```
 osint_agent/
-├── api/                  # FastAPI + SSE
+├── api/                  # FastAPI + SSE + auth endpoints
+├── auth.py               # login, PBKDF2, token HMAC, RBAC
 ├── services/             # agent engine, orchestrator, budget, store, trust anchor
 ├── profiling/            # corpus, extractor, resolver, 6D, synthesizer, research report
 ├── tools/                # 22 tools (lazy import)
 ├── knowledge/            # playbooks + anti-hallucination
 ├── core/                 # evidence schema + hash
 └── cli.py
+config/users.json         # ผู้ใช้จำลองสำหรับ demo
+docs/                     # คู่มือ, use case, หลักฐานทดสอบ
 vendor/                   # SYNINT core + osint-d2 adapters (ดู VENDORED.md)
 ```
 
 ## 🧪 Tests
 
 ```bash
-make test          # ไม่ยิงเน็ต
+make test          # 228 กรณี ไม่ยิงเน็ต (รวม auth/RBAC 12 กรณี)
 make lint
 ```
 
@@ -165,6 +180,7 @@ make lint
 - PDPA: ไม่รายงานพิกัดบ้าน real-time, เลขบัตร, ทะเบียนรถเต็ม
 - ไม่ auto-merge ตัวตน — identity candidate ต้องผ่าน human review
 - “ไม่พบข้อมูล” ไม่เท่ากับ “ปลอดภัย”
-- API/UI ไม่มี authentication ควร bind localhost
+- มี login + RBAC สำหรับ demo แต่ผู้ใช้เป็นข้อมูลจำลอง ยังไม่เชื่อม AD/LDAP
+- ยัง bind localhost; หากเปิดสู่วงนอกต้องเปลี่ยนรหัสผ่านและใช้ HTTPS
 
-เอกสารเพิ่มเติม: `ARCHITECTURE.md`, `THREAT_MODEL.md`, `DPIA.md`, `VENDORED.md`
+เอกสารเพิ่มเติม: `docs/USER_MANUAL.md`, `docs/USE_CASES.md`, `docs/TEST_EVIDENCE.md`, `ARCHITECTURE.md`, `THREAT_MODEL.md`, `DPIA.md`, `VENDORED.md`
