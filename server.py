@@ -2,12 +2,10 @@
 Simple HTTP server to serve landing page and route to Streamlit
 """
 
-from http.server import SimpleHTTPRequestHandler, HTTPServer
-import os
 import subprocess
 import threading
 import time
-import webbrowser
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 PORT = 8000
 STREAMLIT_PORT = 8506

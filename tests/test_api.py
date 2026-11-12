@@ -28,7 +28,10 @@ def client(store, monkeypatch):
     monkeypatch.setattr(orch.collectors, "fetch", fake_fetch)
     monkeypatch.setattr(orch.collectors, "scan_profiles", lambda u, timeout=45: [])
     app = create_app(store)
-    return TestClient(app)
+    client = TestClient(app)
+    token = client.post("/auth/login", json={"username": "admin", "password": "Admin#1234"}).json()["access_token"]
+    client.headers.update({"Authorization": f"Bearer {token}"})
+    return client
 
 
 def _wait(client, run_id):

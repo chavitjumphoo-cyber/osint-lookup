@@ -30,6 +30,22 @@ python -m streamlit run app_modern.py
 - UI: http://localhost:8501
 - API docs: http://localhost:8000/docs
 
+## 🔐 ผู้ใช้และการกำหนดสิทธิ์ (demo)
+
+ระบบมี login + RBAC เพื่อสาธิตการควบคุมการเข้าถึง ข้อมูลผู้ใช้เป็นข้อมูลจำลองใน `config/users.json`
+
+| บัญชี | รหัสผ่าน | บทบาท | สิทธิ์ |
+|---|---|---|---|
+| `admin` | `Admin#1234` | admin | ทุกอย่าง + ตั้งค่า/จัดการผู้ใช้ |
+| `analyst` | `Analyst#1234` | analyst | อ่าน · เริ่มสืบสวน · review · cancel |
+| `viewer` | `Viewer#1234` | viewer | อ่านและส่งออกเท่านั้น |
+
+- เปลี่ยนชุดผู้ใช้ด้วย `OSINT_USERS_FILE` (ไฟล์ JSON) และตั้ง `OSINT_SECRET_KEY` ก่อนใช้งานจริง
+- รหัสผ่านเก็บเป็น PBKDF2-SHA256 + salt; token เซ็น HMAC และหมดอายุใน 8 ชั่วโมง
+- API ทุกเส้นทาง (ยกเว้น `/health` และ `/auth/login`) ต้องส่ง `Authorization: Bearer <token>`
+- ทุกครั้งที่ login/สำเร็จ/ล้มเหลว/logout ถูกบันทึกใน audit hash-chain
+- ยัง bind localhost; หากเปิดสู่วงนอกควรเปลี่ยนรหัสผ่าน demo และใช้ HTTPS
+
 ## ⚙️ Configuration
 
 ```env

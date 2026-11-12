@@ -50,3 +50,6 @@ audit/*.jsonl
 audit/*.sqlite
 audit/*.sqlite-*
 .DS_Store
+
+# Runtime secret
+audit/.secret_key

@@ -7,6 +7,7 @@ from datetime import datetime
 
 import streamlit as st
 
+from osint_agent import auth
 from osint_agent.access import audit
 from osint_agent.agent import DEFAULT_MAXPLUS_BASE_URL, _build_client, read_config
 from osint_agent.graph import build_graph_html, build_relationship_graph
@@ -19,8 +20,7 @@ st.set_page_config(page_title="OSINT Lookup", page_icon="◆", layout="wide", in
 
 CONFIG = read_config()
 
-# Main Investigation UI (ไม่ต้อง login)
-ACTOR = {"name": "user", "unit": "-"}
+# ACTOR ถูกกำหนดหลังเข้าสู่ระบบ
 
 # Modern Color Palette (matching landing.html)
 st.markdown(
@@ -371,54 +371,101 @@ div[data-testid="column"] {
 )
 
 
-# Main Investigation UI
-st.markdown(
-    """
+
+def _brand() -> None:
+    st.markdown(
+        """
 <div class="brand-mark" style="text-align: center; font-size: 3rem; margin-bottom: 0.5rem;">◆</div>
 <h1 style="text-align: center; font-size: 2.5rem; margin-bottom: 0.5rem;">OSINT Lookup</h1>
 <p style="text-align: center; color: #9aa0a6; margin-bottom: 3rem;">Intelligence-Grade Investigation Platform</p>
 """,
-    unsafe_allow_html=True,
-)
+        unsafe_allow_html=True,
+    )
+
+
+def _login_gate() -> None:
+    _brand()
+    st.markdown(
+        '<div class="login-header">🔐 เข้าสู่ระบบ</div>', unsafe_allow_html=True
+    )
+    with st.form("login_form"):
+        username = st.text_input("ชื่อผู้ใช้", autocomplete="username")
+        password = st.text_input("รหัสผ่าน", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("เข้าสู่ระบบ  →", use_container_width=True)
+    if submitted:
+        user = auth.authenticate(username, password)
+        if not user:
+            audit("login_failed", {"name": username or "-"})
+            st.error("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง (หรือบัญชีถูกล็อกชั่วคราว)")
+        else:
+            audit("login", user)
+            st.session_state["user"] = user
+            st.rerun()
+    st.caption("บัญชีสาธิต: admin/Admin#1234 · analyst/Analyst#1234 · viewer/Viewer#1234")
+    st.stop()
+
+
+if not st.session_state.get("user"):
+    _login_gate()
+
+USER = st.session_state["user"]
+ACTOR = {"name": USER["username"], "unit": USER.get("unit", "-")}
+CAN_INVESTIGATE = auth.has_permission(USER, "investigate")
+CAN_REVIEW = auth.has_permission(USER, "review")
+CAN_SETTINGS = auth.has_permission(USER, "settings")
+
+with st.sidebar:
+    st.markdown(f"**{USER['name']}**")
+    st.caption(f"{USER['role']} · {USER.get('unit', '-')}")
+    if st.button("ออกจากระบบ", use_container_width=True):
+        audit("logout", ACTOR)
+        st.session_state.pop("user", None)
+        st.rerun()
+    st.caption("สิทธิ์: " + ", ".join(sorted(auth.PERMISSIONS[USER["role"]])))
+
+# Main Investigation UI
+_brand()
 
 st.markdown('<div class="inv-card">', unsafe_allow_html=True)
 st.markdown("### 🎯 เริ่มการสืบสวน", unsafe_allow_html=True)
 
-# API Key Configuration
-with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ config จาก .env หากไม่กำหนด)", expanded=False):
-    st.info("💡 ระบบจะใช้ .env configuration เป็นค่าเริ่มต้น คุณสามารถ override ได้ด้านล่าง")
+# API Key Configuration (เฉพาะ admin)
+if CAN_SETTINGS:
+    # API Key Configuration
+    with st.expander("⚙️ ตั้งค่า API Keys (Optional — ใช้ config จาก .env หากไม่กำหนด)", expanded=False):
+        st.info("💡 ระบบจะใช้ .env configuration เป็นค่าเริ่มต้น คุณสามารถ override ได้ด้านล่าง")
 
-    st.markdown("**MaxPlus (แนะนำ)**")
-    maxplus_key = st.text_input("MaxPlus API Key", type="password", key="maxplus_api_key")
-    maxplus_base = st.text_input(
-        "MaxPlus Base URL",
-        value=CONFIG.get("MAXPLUS_BASE_URL") or DEFAULT_MAXPLUS_BASE_URL,
-        key="maxplus_base_url",
-    )
-    maxplus_model = st.text_input(
-        "MaxPlus Model",
-        value=CONFIG.get("MAXPLUS_MODEL") or "claude-sonnet-5-5",
-        key="maxplus_model",
-    )
+        st.markdown("**MaxPlus (แนะนำ)**")
+        maxplus_key = st.text_input("MaxPlus API Key", type="password", key="maxplus_api_key")
+        maxplus_base = st.text_input(
+            "MaxPlus Base URL",
+            value=CONFIG.get("MAXPLUS_BASE_URL") or DEFAULT_MAXPLUS_BASE_URL,
+            key="maxplus_base_url",
+        )
+        maxplus_model = st.text_input(
+            "MaxPlus Model",
+            value=CONFIG.get("MAXPLUS_MODEL") or "claude-sonnet-5-5",
+            key="maxplus_model",
+        )
 
-    st.markdown("**Claude/Anthropic (ทางเลือก)**")
-    anthropic_key = st.text_input("Anthropic API Key", type="password", key="anthropic_api_key")
+        st.markdown("**Claude/Anthropic (ทางเลือก)**")
+        anthropic_key = st.text_input("Anthropic API Key", type="password", key="anthropic_api_key")
 
-    if st.button("💾 บันทึก API Keys"):
-        saved_count = 0
-        for name, value in (
-            ("maxplus_key", maxplus_key),
-            ("maxplus_base", maxplus_base),
-            ("maxplus_model", maxplus_model),
-            ("anthropic_key", anthropic_key),
-        ):
-            if value:
-                st.session_state[f"saved_{name}"] = value
-                saved_count += 1
-        if saved_count:
-            st.success(f"✓ บันทึก {saved_count} ค่าแล้ว")
-        else:
-            st.info("ไม่มีการบันทึก — ระบบจะใช้ .env configuration")
+        if st.button("💾 บันทึก API Keys"):
+            saved_count = 0
+            for name, value in (
+                ("maxplus_key", maxplus_key),
+                ("maxplus_base", maxplus_base),
+                ("maxplus_model", maxplus_model),
+                ("anthropic_key", anthropic_key),
+            ):
+                if value:
+                    st.session_state[f"saved_{name}"] = value
+                    saved_count += 1
+            if saved_count:
+                st.success(f"✓ บันทึก {saved_count} ค่าแล้ว")
+            else:
+                st.info("ไม่มีการบันทึก — ระบบจะใช้ .env configuration")
 
 st.markdown("---")
 
@@ -453,6 +500,9 @@ with st.form("investigate"):
 st.markdown('</div>', unsafe_allow_html=True)
 
 if submitted:
+    if not CAN_INVESTIGATE:
+        st.warning("บทบาท viewer อ่านได้อย่างเดียว — ต้องเป็น analyst หรือ admin จึงเริ่มสืบสวนได้")
+        st.stop()
     value = identifier_value.strip()
     if not value:
         st.warning("กรุณากรอกค่าที่ต้องการตรวจสอบ")
@@ -738,12 +788,17 @@ if submitted:
                     f"`{candidate['candidate_id']}` · **{candidate['status']}** · "
                     f"{', '.join(candidate.get('entity_ids', []))}"
                 )
+                if not CAN_REVIEW:
+                    st.caption("ต้องเป็น analyst หรือ admin จึงยืนยัน candidate ได้")
                 cols = st.columns(3)
                 for label, action in (("ยืนยัน", "confirm"), ("ตัด", "reject"), ("ย้อน", "reverse")):
                     if cols[0 if action == "confirm" else 1 if action == "reject" else 2].button(
-                        label, key=f"{candidate['candidate_id']}-{action}"
+                        label,
+                        key=f"{candidate['candidate_id']}-{action}",
+                        disabled=not CAN_REVIEW,
                     ):
                         store.decide_candidate(run_id, candidate["candidate_id"], action)
+                        audit("review_candidate", ACTOR, run_id=run_id, action=action)
                         st.rerun()
 
         with tab_graph:

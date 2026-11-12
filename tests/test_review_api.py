@@ -15,7 +15,10 @@ def client(store, monkeypatch):
     from osint_agent.services import tool_runner
 
     monkeypatch.setattr(tool_runner, "execute_tool", lambda n, a: {"output": "ok", "images": []})
-    return TestClient(create_app(store))
+    client = TestClient(create_app(store))
+    token = client.post("/auth/login", json={"username": "admin", "password": "Admin#1234"}).json()["access_token"]
+    client.headers.update({"Authorization": f"Bearer {token}"})
+    return client
 
 
 def test_review_flow(store, client):

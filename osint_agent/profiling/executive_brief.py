@@ -9,6 +9,8 @@ import json
 import os
 import re
 
+from . import narrative
+
 CONF_ORDER = {"Confirmed": 4, "Probable": 3, "Possible": 2, "Unverified": 1, "Inferred": 1, "Speculative": 0}
 
 
@@ -46,7 +48,7 @@ def build(data: dict, artifacts: list[dict]) -> dict:
     valid = {a["artifact_id"] for a in artifacts}
     profiles = data.get("profiles_detail") or []
     confidence = _profile_conf(profiles)
-    name = (data["identity"].get("names") or [None])[0]
+    name = narrative._name(profiles) or (data["identity"].get("names") or [None])[0]
     platforms = sorted({p["platform"] for p in profiles})
     usernames = sorted({p["username"] for p in profiles if p.get("username")})[:5]
     locations = data["identity"].get("locations") or []

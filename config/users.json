@@ -1,0 +1,28 @@
+{
+  "users": [
+    {
+      "username": "admin",
+      "name": "ผู้ดูแลระบบ",
+      "role": "admin",
+      "unit": "ศูนย์สารสนเทศ",
+      "active": true,
+      "password_hash": "pbkdf2_sha256$200000$6efd2dba3f0409c55ab6c9dc4a6d7690$352bb6e34379b4887954c7c297236c3155d1ef052f6cac4d2cd5e66fa3cef73f"
+    },
+    {
+      "username": "analyst",
+      "name": "นักวิเคราะห์",
+      "role": "analyst",
+      "unit": "กก.สืบสวน",
+      "active": true,
+      "password_hash": "pbkdf2_sha256$200000$014e967e0d3d1e1e195e5854199b05ca$ee6ed8d824c19db2992917896412e01bd5fbe6ac22331fbc7e668ab11c00150f"
+    },
+    {
+      "username": "viewer",
+      "name": "ผู้เยี่ยมชม",
+      "role": "viewer",
+      "unit": "วิชาการ",
+      "active": true,
+      "password_hash": "pbkdf2_sha256$200000$52dd540b90e130653aea838745995d7d$62f2f55344fe0ec9250d05852d9c789a5cad8d57acf71a443a7eab8f92ddce2b"
+    }
+  ]
+}
